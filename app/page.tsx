@@ -1,84 +1,47 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
+import { shelterFilters, shelters } from "./shelter-data";
 
-type Shelter = {
-  name: string;
-  distance: string;
-  walk: string;
-  status: "available" | "limited" | "call";
-  statusLabel: string;
-  confirmed: string;
-  hours: string;
-  intake: string;
-  groups: string[];
-  services: string[];
-  note: string;
+const matchesFilter = (groups: string[], services: string[], filter: string) => {
+  const all = [...groups, ...services].join(" ").toLowerCase();
+  const searchTerms: Record<string, string[]> = {
+    "Open 24/7": ["24/7"],
+    Women: ["women"],
+    Men: ["men"],
+    Youth: ["youth"],
+    Families: ["families", "children"],
+    Indigenous: ["indigenous"],
+    Meals: ["meals"],
+    Showers: ["showers"],
+  };
+  return searchTerms[filter]?.some((term) => all.includes(term)) ?? true;
 };
 
-const shelters: Shelter[] = [
-  {
-    name: "Maison du Canal",
-    distance: "1.2 km",
-    walk: "17 min walk",
-    status: "available",
-    statusLabel: "Space reported available",
-    confirmed: "Confirmed 18 minutes ago",
-    hours: "Open now · Check in before 9:00 PM",
-    intake: "Call first",
-    groups: ["Adults", "All genders"],
-    services: ["Meal", "Showers", "Accessible"],
-    note: "Staff confirm admission directly. Space is not guaranteed until intake is complete.",
-  },
-  {
-    name: "Harbour Night Centre",
-    distance: "2.4 km",
-    walk: "31 min walk",
-    status: "limited",
-    statusLabel: "Limited space",
-    confirmed: "Confirmed 42 minutes ago",
-    hours: "Opens at 7:00 PM · Arrive by 10:00 PM",
-    intake: "Walk-ins accepted",
-    groups: ["Adults", "Couples"],
-    services: ["Meal", "Pets", "Storage"],
-    note: "A small number of spaces were reported. Call before travelling if you can.",
-  },
-  {
-    name: "Community House",
-    distance: "3.1 km",
-    walk: "12 min by transit",
-    status: "call",
-    statusLabel: "Call before travelling",
-    confirmed: "Last confirmed yesterday",
-    hours: "Open 24 hours",
-    intake: "Referral required",
-    groups: ["Women", "Children", "Families"],
-    services: ["Meals", "Showers", "Accessible"],
-    note: "Availability has not been confirmed today. Contact the intake team first.",
-  },
-];
-
-const filters = ["Open now", "Family", "Women", "Men", "Youth", "Pets", "Accessible", "Showers"];
-
 export default function Home() {
-  const [language, setLanguage] = useState<"EN" | "FR">("EN");
   const [query, setQuery] = useState("");
-  const [activeFilters, setActiveFilters] = useState<string[]>(["Open now"]);
-  const [searched, setSearched] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [notice, setNotice] = useState("Showing the Montréal pilot directory");
   const [locating, setLocating] = useState(false);
 
   const visibleShelters = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
     return shelters.filter((shelter) => {
-      if (activeFilters.includes("Family") && !shelter.groups.includes("Families")) return false;
-      if (activeFilters.includes("Women") && !shelter.groups.includes("Women")) return false;
-      if (activeFilters.includes("Men") && !shelter.groups.includes("Adults")) return false;
-      if (activeFilters.includes("Youth") && !shelter.groups.includes("Children")) return false;
-      if (activeFilters.includes("Pets") && !shelter.services.includes("Pets")) return false;
-      if (activeFilters.includes("Accessible") && !shelter.services.includes("Accessible")) return false;
-      if (activeFilters.includes("Showers") && !shelter.services.includes("Showers")) return false;
-      return true;
+      if (!activeFilters.every((filter) => matchesFilter(shelter.groups, shelter.services, filter))) {
+        return false;
+      }
+      if (!normalizedQuery || ["montreal", "montréal", "qc", "quebec", "québec"].includes(normalizedQuery)) {
+        return true;
+      }
+      return [
+        shelter.name,
+        shelter.address,
+        shelter.intake,
+        ...shelter.groups,
+        ...shelter.services,
+      ].join(" ").toLowerCase().includes(normalizedQuery);
     });
-  }, [activeFilters]);
+  }, [activeFilters, query]);
 
   function toggleFilter(filter: string) {
     setActiveFilters((current) =>
@@ -89,67 +52,57 @@ export default function Home() {
   function useLocation() {
     setLocating(true);
     if (!navigator.geolocation) {
-      setQuery("Montréal, QC");
-      setSearched(true);
+      setQuery("Montréal");
+      setNotice("Location is unavailable. Showing the Montréal pilot directory.");
       setLocating(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       () => {
-        setQuery("Near your current location");
-        setSearched(true);
+        setQuery("Montréal");
+        setNotice("Location received. Distance sorting is coming next; showing Montréal shelters.");
         setLocating(false);
       },
       () => {
-        setQuery("Montréal, QC");
-        setSearched(true);
+        setQuery("Montréal");
+        setNotice("Location was not shared. Showing the Montréal pilot directory.");
         setLocating(false);
       },
       { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 },
     );
   }
 
+  function search(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setNotice(query.trim() ? `Showing results for “${query.trim()}”` : "Showing the Montréal pilot directory");
+  }
+
   return (
     <main>
       <div className="prototype-note" role="status">
-        <span>Early community prototype</span>
-        <span>Demo listings — not live shelter information</span>
+        <span>Montréal pilot directory</span>
+        <span>Real shelter details · Capacity must be confirmed directly</span>
       </div>
 
       <header className="site-header">
         <a className="brand" href="#top" aria-label="HavenNear home">
-          <span className="brand-mark" aria-hidden="true">
-            <span />
-          </span>
+          <span className="brand-mark" aria-hidden="true"><span /></span>
           <span>HavenNear</span>
         </a>
         <nav aria-label="Main navigation">
           <a href="#how">How it works</a>
           <a href="#shelters">For shelters</a>
-          <button
-            className="language"
-            type="button"
-            onClick={() => setLanguage(language === "EN" ? "FR" : "EN")}
-            aria-label="Change language"
-          >
-            {language === "EN" ? "FR" : "EN"}
-          </button>
-          <a className="staff-link" href="#shelters">
-            Shelter staff
-          </a>
+          <a className="staff-link" href="/admin">Shelter staff</a>
         </nav>
       </header>
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="eyebrow">
-            <span aria-hidden="true">●</span> Free · Private · No account needed
-          </p>
+          <p className="eyebrow"><span aria-hidden="true">●</span> Free · Private · No account needed</p>
           <h1>Find a safe place tonight.</h1>
           <p className="intro">
-            See nearby shelters, who they welcome, what they provide, and when
-            space was last confirmed.
+            See Montréal shelters, who they welcome, what they provide, and how to contact them.
           </p>
 
           <div className="search-panel" aria-label="Find nearby help">
@@ -158,14 +111,8 @@ export default function Home() {
               {locating ? "Finding your location…" : "Use my location"}
             </button>
             <div className="divider"><span>or</span></div>
-            <form
-              className="location-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (query.trim()) setSearched(true);
-              }}
-            >
-              <label htmlFor="location">Enter a city, neighbourhood or postal code</label>
+            <form className="location-form" onSubmit={search}>
+              <label htmlFor="location">Enter a city, neighbourhood, shelter or service</label>
               <div className="input-row">
                 <input
                   id="location"
@@ -174,25 +121,29 @@ export default function Home() {
                   placeholder="Montréal, QC"
                   autoComplete="postal-code"
                 />
-                <button type="submit" aria-label="Search">Find help</button>
+                <button type="submit">Find help</button>
               </div>
             </form>
             <p className="privacy-line">
               <span className="lock" aria-hidden="true">▣</span>
-              Your location is used only to show nearby help. We do not create a profile or track you.
+              Your location is used only to show help. We do not create a profile or track you.
             </p>
           </div>
 
           <div className="quick-links" aria-label="Types of help">
-            {[
-              ["⌂", "Shelter"],
-              ["●", "Food"],
-              ["≈", "Showers"],
-              ["✣", "Washrooms"],
-              ["✦", "Warming & cooling"],
-            ].map(([icon, label]) => (
-              <button key={label} type="button" onClick={() => setSearched(true)}>
-                <span aria-hidden="true">{icon}</span>{label}
+            {["Shelter", "Meals", "Showers", "Families", "Youth"].map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  const filter = label === "Shelter" ? null : label;
+                  if (filter && shelterFilters.includes(filter) && !activeFilters.includes(filter)) {
+                    setActiveFilters((current) => [...current, filter]);
+                  }
+                  document.getElementById("results")?.scrollIntoView();
+                }}
+              >
+                <span aria-hidden="true">●</span>{label}
               </button>
             ))}
           </div>
@@ -200,10 +151,7 @@ export default function Home() {
 
         <aside className="trust-card" aria-label="HavenNear privacy promise">
           <div className="trust-art" aria-hidden="true">
-            <span className="moon">●</span>
-            <span className="roof" />
-            <span className="door" />
-            <span className="path" />
+            <span className="moon">●</span><span className="roof" /><span className="door" /><span className="path" />
           </div>
           <p className="trust-kicker">A clear path to help</p>
           <h2>We know where help is.<br />We don’t need to know who you are.</h2>
@@ -215,17 +163,22 @@ export default function Home() {
         </aside>
       </section>
 
-      <section className="results-section" aria-live="polite">
+      <section className="results-section" id="results" aria-live="polite">
         <div className="results-heading">
           <div>
-            <p className="section-label">{searched ? `Showing demo help ${query ? `for ${query}` : "nearby"}` : "Example nearby results"}</p>
-            <h2>Places that may be able to help</h2>
+            <p className="section-label">{notice}</p>
+            <h2>{visibleShelters.length} places that may be able to help</h2>
           </div>
-          <p className="updated"><span /> Availability can change quickly</p>
+          <p className="updated"><span /> Space can change quickly — call first</p>
+        </div>
+
+        <div className="capacity-boundary">
+          <strong>No live capacity claims yet.</strong>
+          These are real organizations with details checked against their official websites. Until each shelter joins HavenNear, every listing says to call and confirm.
         </div>
 
         <div className="filters" aria-label="Filter shelters">
-          {filters.map((filter) => (
+          {shelterFilters.map((filter) => (
             <button
               type="button"
               key={filter}
@@ -240,14 +193,11 @@ export default function Home() {
 
         <div className="shelter-list">
           {visibleShelters.length ? visibleShelters.map((shelter) => (
-            <article className="shelter-card" key={shelter.name}>
+            <article className="shelter-card" key={shelter.id}>
               <div className="shelter-main">
-                <div className={`status status-${shelter.status}`}>
-                  <span aria-hidden="true" />
-                  {shelter.statusLabel}
-                </div>
+                <div className="status status-call"><span aria-hidden="true" />{shelter.statusLabel}</div>
                 <h3>{shelter.name}</h3>
-                <p className="distance">{shelter.distance} · {shelter.walk}</p>
+                <p className="distance">{shelter.address}</p>
                 <p className="hours">{shelter.hours}</p>
                 <div className="tags">
                   {shelter.groups.map((group) => <span key={group}>{group}</span>)}
@@ -255,20 +205,33 @@ export default function Home() {
                 </div>
               </div>
               <div className="shelter-action">
-                <p className="confirmed">{shelter.confirmed}</p>
+                <p className="confirmed">Capacity not connected</p>
                 <p className="intake">{shelter.intake}</p>
+                <p className="phone-line">{shelter.phoneDisplay}</p>
                 <div className="card-buttons">
-                  <button type="button">Call shelter</button>
-                  <button type="button" className="secondary">Directions</button>
+                  <a href={`tel:${shelter.phone}`}>Call shelter</a>
+                  {!shelter.confidentialAddress && (
+                    <a
+                      className="secondary"
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shelter.address)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Directions
+                    </a>
+                  )}
                 </div>
                 <p className="card-note">{shelter.note}</p>
+                <a className="source-link" href={shelter.sourceUrl} target="_blank" rel="noreferrer">
+                  Details from {shelter.sourceLabel}
+                </a>
               </div>
             </article>
           )) : (
             <div className="empty-state">
-              <h3>No demo listings match every filter.</h3>
-              <p>Remove one or more filters to see other possible places.</p>
-              <button type="button" onClick={() => setActiveFilters(["Open now"])}>Clear filters</button>
+              <h3>No listings match every filter.</h3>
+              <p>Remove one or more filters, or call 211 for help finding another resource.</p>
+              <button type="button" onClick={() => { setActiveFilters([]); setQuery(""); }}>Clear filters</button>
             </div>
           )}
         </div>
@@ -280,9 +243,9 @@ export default function Home() {
           <h2>Simple information. Fewer unnecessary trips.</h2>
         </div>
         <ol>
-          <li><span>1</span><strong>Search nearby</strong><p>Use your location or type an area. No account or name is required.</p></li>
-          <li><span>2</span><strong>Check the fit</strong><p>See eligibility, services, intake rules and when availability was confirmed.</p></li>
-          <li><span>3</span><strong>Contact the shelter</strong><p>Call or get directions. The shelter handles registration privately.</p></li>
+          <li><span>1</span><strong>Search nearby</strong><p>No name or account is required.</p></li>
+          <li><span>2</span><strong>Check the fit</strong><p>See who is welcomed, services, hours and intake rules.</p></li>
+          <li><span>3</span><strong>Call before travelling</strong><p>The shelter confirms space and handles registration privately.</p></li>
         </ol>
       </section>
 
@@ -290,15 +253,15 @@ export default function Home() {
         <div>
           <p className="section-label light">For participating shelters</p>
           <h2>Keep people informed in less than 30 seconds.</h2>
-          <p>Update your public status with four clear choices. No guest or intake records are shared with HavenNear.</p>
+          <p>Update public capacity, hours, services and intake guidance. HavenNear never stores guest or intake records.</p>
         </div>
         <div className="admin-demo">
-          <p>Current public status</p>
-          <div className="admin-choice selected"><span /> Space available <b>✓</b></div>
-          <div className="admin-choice"><span /> Limited space</div>
-          <div className="admin-choice"><span /> Full</div>
-          <div className="admin-choice"><span /> Call first / unknown</div>
-          <button type="button">Shelter staff sign in</button>
+          <p>Administration workspace</p>
+          <div className="admin-choice selected"><span /> Update capacity <b>✓</b></div>
+          <div className="admin-choice"><span /> Confirm hours</div>
+          <div className="admin-choice"><span /> Edit services and eligibility</div>
+          <div className="admin-choice"><span /> Review the public listing</div>
+          <a className="admin-button" href="/admin">Open shelter administration</a>
         </div>
       </section>
 
@@ -307,14 +270,11 @@ export default function Home() {
           <span className="brand-mark small" aria-hidden="true"><span /></span>
           <div><strong>HavenNear</strong><p>Free public-benefit shelter information.</p></div>
         </div>
-        <div className="dedication">
-          <p>For Razan.</p>
-          <span>Original idea and inspiration for HavenNear.</span>
-        </div>
+        <div className="dedication"><p>For Razan.</p><span>Original idea and inspiration for HavenNear.</span></div>
         <div className="footer-links">
           <a href="#top">Privacy boundary</a>
-          <a href="#top">Public-benefit commitment</a>
-          <a href="#shelters">For shelters</a>
+          <a href="#results">Montréal directory</a>
+          <a href="/admin">For shelters</a>
         </div>
       </footer>
     </main>
