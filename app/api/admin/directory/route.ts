@@ -1,4 +1,4 @@
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { requireOperatorApi } from "../../../operator-auth";
 import {
   approveStagingRecord,
   archiveShelter,
@@ -13,7 +13,7 @@ import {
 export const dynamic = "force-dynamic";
 
 async function authenticatedUser() {
-  const user = await getChatGPTUser();
+  const user = await requireOperatorApi();
   if (!user) return null;
   return {
     email: user.email,

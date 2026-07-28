@@ -110,3 +110,41 @@ export const directoryReviewActivity = sqliteTable("directory_review_activity", 
   reason: text("reason").notNull().default(""),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+export const platformOperators = sqliteTable("platform_operators", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  role: text("role").notNull().default("owner"),
+  status: text("status").notNull().default("active"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const shelterStaffAccess = sqliteTable("shelter_staff_access", {
+  id: text("id").primaryKey(),
+  shelterId: text("shelter_id").notNull(),
+  email: text("email").notNull(),
+  displayName: text("display_name"),
+  role: text("role").notNull().default("editor"),
+  status: text("status").notNull().default("active"),
+  grantedBy: text("granted_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+});
+
+export const shelterAvailabilityUpdates = sqliteTable("shelter_availability_updates", {
+  id: text("id").primaryKey(),
+  shelterId: text("shelter_id").notNull(),
+  status: text("status").notNull(),
+  spacesAvailable: integer("spaces_available"),
+  validForMinutes: integer("valid_for_minutes").notNull(),
+  hours: text("hours").notNull(),
+  intake: text("intake").notNull(),
+  groupsJson: text("groups_json").notNull().default("[]"),
+  servicesJson: text("services_json").notNull().default("[]"),
+  updatedBy: text("updated_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+});
