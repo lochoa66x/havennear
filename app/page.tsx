@@ -3,6 +3,25 @@
 import { FormEvent, useMemo, useState } from "react";
 import { shelterFilters, shelters } from "./shelter-data";
 
+type UserLocation = { latitude: number; longitude: number };
+
+function distanceInKilometres(from: UserLocation, to: { latitude: number; longitude: number }) {
+  const earthRadius = 6371;
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const latitudeDistance = radians(to.latitude - from.latitude);
+  const longitudeDistance = radians(to.longitude - from.longitude);
+  const a =
+    Math.sin(latitudeDistance / 2) ** 2 +
+    Math.cos(radians(from.latitude)) *
+      Math.cos(radians(to.latitude)) *
+      Math.sin(longitudeDistance / 2) ** 2;
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(distance: number) {
+  return distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`;
+}
+
 const matchesFilter = (groups: string[], services: string[], filter: string) => {
   const all = [...groups, ...services].join(" ").toLowerCase();
   const searchTerms: Record<string, string[]> = {
@@ -23,25 +42,42 @@ export default function Home() {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [notice, setNotice] = useState("Showing the Montréal pilot directory");
   const [locating, setLocating] = useState(false);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
 
   const visibleShelters = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return shelters.filter((shelter) => {
-      if (!activeFilters.every((filter) => matchesFilter(shelter.groups, shelter.services, filter))) {
-        return false;
-      }
-      if (!normalizedQuery || ["montreal", "montréal", "qc", "quebec", "québec"].includes(normalizedQuery)) {
-        return true;
-      }
-      return [
-        shelter.name,
-        shelter.address,
-        shelter.intake,
-        ...shelter.groups,
-        ...shelter.services,
-      ].join(" ").toLowerCase().includes(normalizedQuery);
-    });
-  }, [activeFilters, query]);
+    return shelters
+      .filter((shelter) => {
+        if (!activeFilters.every((filter) => matchesFilter(shelter.groups, shelter.services, filter))) {
+          return false;
+        }
+        if (!normalizedQuery || ["montreal", "montréal", "qc", "quebec", "québec", "canada"].includes(normalizedQuery)) {
+          return true;
+        }
+        return [
+          shelter.name,
+          shelter.address,
+          shelter.city,
+          shelter.provinceCode,
+          shelter.intake,
+          ...shelter.groups,
+          ...shelter.services,
+        ].join(" ").toLowerCase().includes(normalizedQuery);
+      })
+      .map((shelter) => ({
+        ...shelter,
+        distanceKm:
+          userLocation && shelter.latitude !== undefined && shelter.longitude !== undefined
+            ? distanceInKilometres(userLocation, { latitude: shelter.latitude, longitude: shelter.longitude })
+            : null,
+      }))
+      .sort((a, b) => {
+        if (a.distanceKm === null && b.distanceKm === null) return a.name.localeCompare(b.name);
+        if (a.distanceKm === null) return 1;
+        if (b.distanceKm === null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+  }, [activeFilters, query, userLocation]);
 
   function toggleFilter(filter: string) {
     setActiveFilters((current) =>
@@ -59,12 +95,17 @@ export default function Home() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      () => {
-        setQuery("Montréal");
-        setNotice("Location received. Distance sorting is coming next; showing Montréal shelters.");
+      (position) => {
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setQuery("");
+        setNotice("Sorted by straight-line distance from this device");
         setLocating(false);
       },
       () => {
+        setUserLocation(null);
         setQuery("Montréal");
         setNotice("Location was not shared. Showing the Montréal pilot directory.");
         setLocating(false);
@@ -81,8 +122,8 @@ export default function Home() {
   return (
     <main>
       <div className="prototype-note" role="status">
-        <span>Montréal pilot directory</span>
-        <span>Real shelter details · Capacity must be confirmed directly</span>
+        <span>Canada-ready directory · Montréal pilot data</span>
+        <span>Every suitable shelter can appear · Live reports require verified participation</span>
       </div>
 
       <header className="site-header">
@@ -93,6 +134,7 @@ export default function Home() {
         <nav aria-label="Main navigation">
           <a href="#how">How it works</a>
           <a href="#shelters">For shelters</a>
+          <a href="/join">Join free</a>
           <a className="staff-link" href="/admin">Shelter staff</a>
         </nav>
       </header>
@@ -102,7 +144,7 @@ export default function Home() {
           <p className="eyebrow"><span aria-hidden="true">●</span> Free · Private · No account needed</p>
           <h1>Find a safe place tonight.</h1>
           <p className="intro">
-            See Montréal shelters, who they welcome, what they provide, and how to contact them.
+            Find the closest suitable shelter in the directory. Participating shelters can also report current availability.
           </p>
 
           <div className="search-panel" aria-label="Find nearby help">
@@ -112,7 +154,7 @@ export default function Home() {
             </button>
             <div className="divider"><span>or</span></div>
             <form className="location-form" onSubmit={search}>
-              <label htmlFor="location">Enter a city, neighbourhood, shelter or service</label>
+              <label htmlFor="location">Enter a Canadian city, neighbourhood, shelter or service</label>
               <div className="input-row">
                 <input
                   id="location"
@@ -126,7 +168,7 @@ export default function Home() {
             </form>
             <p className="privacy-line">
               <span className="lock" aria-hidden="true">▣</span>
-              Your location is used only to show help. We do not create a profile or track you.
+              Distance is calculated on this device. Your location is not sent to HavenNear, stored or linked to an identity.
             </p>
           </div>
 
@@ -173,8 +215,13 @@ export default function Home() {
         </div>
 
         <div className="capacity-boundary">
-          <strong>No live capacity claims yet.</strong>
-          These are real organizations with details checked against their official websites. Until each shelter joins HavenNear, every listing says to call and confirm.
+          <strong>Distance and participation are separate.</strong>
+          Every suitable shelter can be suggested and ranked by proximity. Participation only adds trusted, time-limited availability updates; it never buys or improves placement.
+        </div>
+
+        <div className="network-explainer" aria-label="Directory status explanation">
+          <div><span className="network-dot directory" /><strong>Directory listing</strong><p>Official contact details; call to confirm capacity.</p></div>
+          <div><span className="network-dot live" /><strong>Participating shelter</strong><p>Verified staff can publish expiring availability.</p></div>
         </div>
 
         <div className="filters" aria-label="Filter shelters">
@@ -192,11 +239,20 @@ export default function Home() {
         </div>
 
         <div className="shelter-list">
-          {visibleShelters.length ? visibleShelters.map((shelter) => (
+          {visibleShelters.length ? visibleShelters.map((shelter, index) => (
             <article className="shelter-card" key={shelter.id}>
               <div className="shelter-main">
+                <div className="listing-badges">
+                  {userLocation && index === 0 && shelter.distanceKm !== null && <span className="closest-badge">Closest suitable listing</span>}
+                  <span className={shelter.participation === "participating" ? "participant-badge" : "directory-badge"}>
+                    {shelter.participation === "participating" ? "Participating shelter" : "Directory listing"}
+                  </span>
+                </div>
                 <div className="status status-call"><span aria-hidden="true" />{shelter.statusLabel}</div>
                 <h3>{shelter.name}</h3>
+                {shelter.distanceKm !== null && (
+                  <p className="calculated-distance">{formatDistance(shelter.distanceKm)} <span>· straight-line</span></p>
+                )}
                 <p className="distance">{shelter.address}</p>
                 <p className="hours">{shelter.hours}</p>
                 <div className="tags">
@@ -223,8 +279,9 @@ export default function Home() {
                 </div>
                 <p className="card-note">{shelter.note}</p>
                 <a className="source-link" href={shelter.sourceUrl} target="_blank" rel="noreferrer">
-                  Details from {shelter.sourceLabel}
+                  Details from {shelter.sourceLabel} · checked {shelter.sourceCheckedAt}
                 </a>
+                <a className="claim-link" href="/join">Shelter staff: claim or update this listing</a>
               </div>
             </article>
           )) : (
@@ -253,7 +310,7 @@ export default function Home() {
         <div>
           <p className="section-label light">For participating shelters</p>
           <h2>Keep people informed in less than 30 seconds.</h2>
-          <p>Update public capacity, hours, services and intake guidance. HavenNear never stores guest or intake records.</p>
+          <p>Join for free to update public capacity, hours, services and intake guidance. HavenNear never stores guest or intake records.</p>
         </div>
         <div className="admin-demo">
           <p>Administration workspace</p>
@@ -262,6 +319,7 @@ export default function Home() {
           <div className="admin-choice"><span /> Edit services and eligibility</div>
           <div className="admin-choice"><span /> Review the public listing</div>
           <a className="admin-button" href="/admin">Open shelter administration</a>
+          <a className="join-network-link" href="/join">Request verified shelter access</a>
         </div>
       </section>
 
@@ -274,6 +332,7 @@ export default function Home() {
         <div className="footer-links">
           <a href="#top">Privacy boundary</a>
           <a href="#results">Montréal directory</a>
+          <a href="/join">Join the network</a>
           <a href="/admin">For shelters</a>
         </div>
       </footer>

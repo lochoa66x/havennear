@@ -62,6 +62,7 @@ export default function ShelterAdminPage() {
             <button className="admin-primary" type="button" onClick={() => setPreviewOpen(true)}>
               Preview the staff workspace
             </button>
+            <a className="admin-secondary-link" href="/join">Request verified shelter access</a>
           </div>
 
           <aside className="access-card">
@@ -110,7 +111,7 @@ export default function ShelterAdminPage() {
             <div>
               <p className="section-label">Shelter staff workspace</p>
               <h1>Update tonight’s information</h1>
-              <p>Designed to take less than 30 seconds for a capacity-only update.</p>
+              <p>Participant updates are time-limited and designed to take less than 30 seconds.</p>
             </div>
             <div className="admin-freshness">
               <span aria-hidden="true" />
@@ -222,6 +223,7 @@ export default function ShelterAdminPage() {
             </div>
             <article className="mini-listing">
               <div>
+                <span className="participant-badge">Participating shelter preview</span>
                 <div className={`status status-${status}`}><span aria-hidden="true" />{statusLabel}</div>
                 <h3>Razan Community Shelter</h3>
                 <p>123 Example Street, Montréal, QC</p>

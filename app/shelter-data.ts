@@ -4,10 +4,18 @@ export type Shelter = {
   id: string;
   name: string;
   address: string;
+  city: string;
+  provinceCode: string;
+  countryCode: "CA";
+  latitude?: number;
+  longitude?: number;
   phone: string;
   phoneDisplay: string;
+  participation: "directory" | "participating";
   status: ShelterStatus;
   statusLabel: string;
+  availabilityUpdatedAt?: string;
+  availabilityExpiresAt?: string;
   hours: string;
   intake: string;
   groups: string[];
@@ -15,6 +23,7 @@ export type Shelter = {
   note: string;
   sourceUrl: string;
   sourceLabel: string;
+  sourceCheckedAt: string;
   confidentialAddress?: boolean;
 };
 
@@ -23,8 +32,14 @@ export const shelters: Shelter[] = [
     id: "old-brewery-webster",
     name: "Old Brewery Mission — Webster Pavilion",
     address: "915 Clark Street, Montréal, QC H2Z 1J8",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.50925,
+    longitude: -73.55849,
     phone: "+15147982244",
     phoneDisplay: "514-798-2244",
+    participation: "directory",
     status: "call",
     statusLabel: "Call to confirm space",
     hours: "Emergency services 24 hours a day, 7 days a week",
@@ -34,13 +49,20 @@ export const shelters: Shelter[] = [
     note: "HavenNear does not receive live capacity from this shelter yet. Please call before travelling.",
     sourceUrl: "https://www.missionoldbrewery.ca/en/i-need-help",
     sourceLabel: "Old Brewery Mission",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "old-brewery-mackenzie",
     name: "Old Brewery Mission — Patricia Mackenzie Pavilion",
     address: "1301 De Maisonneuve Boulevard East, Montréal, QC H2L 2A4",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.51985,
+    longitude: -73.55765,
     phone: "+15145266446",
     phoneDisplay: "514-526-6446",
+    participation: "directory",
     status: "call",
     statusLabel: "Call to confirm space",
     hours: "Emergency services 24 hours a day, 7 days a week",
@@ -50,13 +72,20 @@ export const shelters: Shelter[] = [
     note: "HavenNear does not receive live capacity from this shelter yet. Please call before travelling.",
     sourceUrl: "https://www.missionoldbrewery.ca/en/i-need-help",
     sourceLabel: "Old Brewery Mission",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "maison-du-pere",
     name: "Maison du Père",
     address: "550 René-Lévesque Boulevard East, Montréal, QC H2L 2L3",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.51495,
+    longitude: -73.55714,
     phone: "+15148450168",
     phoneDisplay: "514-845-0168",
+    participation: "directory",
     status: "call",
     statusLabel: "Call to confirm space",
     hours: "Call for current intake hours",
@@ -66,13 +95,20 @@ export const shelters: Shelter[] = [
     note: "The organization reports 106 emergency beds, but that is not a live availability count.",
     sourceUrl: "https://maisondupere.org/programmes-et-services/hebergement-durgence-et-referencement/",
     sourceLabel: "Maison du Père",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "welcome-hall-macaulay",
     name: "Welcome Hall Mission — Macaulay Emergency Shelter",
     address: "1490 Saint-Antoine Street West, Montréal, QC H3C 1C3",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.49187,
+    longitude: -73.57106,
     phone: "+15149356396",
     phoneDisplay: "514-935-6396",
+    participation: "directory",
     status: "call",
     statusLabel: "Call to confirm space",
     hours: "Go in person from 4:00 PM to reserve a bed for the night",
@@ -82,13 +118,20 @@ export const shelters: Shelter[] = [
     note: "Call or go directly to the pavilion. Space is confirmed by shelter staff, not HavenNear.",
     sourceUrl: "https://missionbonaccueil.com/obtenir-de-laide",
     sourceLabel: "Welcome Hall Mission",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "chez-doris",
     name: "Chez Doris",
     address: "1430 Chomedey Street, Montréal, QC H3H 2A7",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.4935,
+    longitude: -73.5796,
     phone: "+15149372341",
     phoneDisplay: "514-937-2341",
+    participation: "directory",
     status: "call",
     statusLabel: "Call to confirm space",
     hours: "Night shelter daily 7:30 PM–8:30 AM; day services also available",
@@ -98,13 +141,20 @@ export const shelters: Shelter[] = [
     note: "Hours and services are taken from the organization’s official website; capacity is not live.",
     sourceUrl: "https://chezdoris.org/en/home/",
     sourceLabel: "Chez Doris",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "refuge-des-jeunes",
     name: "Refuge des Jeunes de Montréal",
     address: "1836 Sainte-Catherine Street East, Montréal, QC H2K 2H3",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.52686,
+    longitude: -73.55036,
     phone: "+15148494221",
     phoneDisplay: "514-849-4221",
+    participation: "directory",
     status: "call",
     statusLabel: "Call to confirm space",
     hours: "Day, evening and overnight emergency reception",
@@ -114,13 +164,18 @@ export const shelters: Shelter[] = [
     note: "The organization reports a 45-bed dormitory. This is not a live count of spaces tonight.",
     sourceUrl: "https://www.refugedesjeunes.org/fr/ou-trouver-de-laide",
     sourceLabel: "Refuge des Jeunes",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "dans-la-rue-bunker",
     name: "Dans la rue — The Bunker",
     address: "Confidential location — call for directions",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
     phone: "+15145240029",
     phoneDisplay: "514-524-0029",
+    participation: "directory",
     status: "call",
     statusLabel: "Call for space and location",
     hours: "Open every night; phone for the current arrival window",
@@ -130,14 +185,21 @@ export const shelters: Shelter[] = [
     note: "The shelter’s address is intentionally confidential. HavenNear will never publish it.",
     sourceUrl: "https://danslarue.org/en/where-to-find-help/the-bunker-emergency-shelter/",
     sourceLabel: "Dans la rue",
+    sourceCheckedAt: "2026-07-28",
     confidentialAddress: true,
   },
   {
     id: "paq-main",
     name: "Projets Autochtones du Québec — Main Shelter",
     address: "169 De La Gauchetière Street East, Montréal, QC H2X 1P7",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.50929,
+    longitude: -73.55866,
     phone: "+15148793310",
     phoneDisplay: "514-879-3310 ext. 202",
+    participation: "directory",
     status: "call",
     statusLabel: "Call to confirm space",
     hours: "Open 24 hours a day, 7 days a week",
@@ -147,13 +209,20 @@ export const shelters: Shelter[] = [
     note: "Alcohol and drugs are not permitted at this site. Staff can refer people to PAQ2 or another shelter.",
     sourceUrl: "https://www.paqc.org/en/services/",
     sourceLabel: "Projets Autochtones du Québec",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "mitshuap",
     name: "Refuge Mitshuap Montréal",
     address: "2154 Sainte-Catherine Street West, Montréal, QC",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
+    latitude: 45.48975,
+    longitude: -73.58603,
     phone: "+14384662325",
     phoneDisplay: "438-466-2325",
+    participation: "directory",
     status: "call",
     statusLabel: "First come, first served",
     hours: "Daily 8:00 PM–7:00 AM; check-in 7:30–8:00 PM",
@@ -163,13 +232,18 @@ export const shelters: Shelter[] = [
     note: "The organization reports 51 sleeping spaces. HavenNear does not yet receive tonight’s remaining count.",
     sourceUrl: "https://mitshuapmtl.ca/en/home-en/",
     sourceLabel: "Refuge Mitshuap Montréal",
+    sourceCheckedAt: "2026-07-28",
   },
   {
     id: "auberge-shalom",
     name: "Auberge Shalom pour femmes",
     address: "Confidential location — call the 24/7 support line",
+    city: "Montréal",
+    provinceCode: "QC",
+    countryCode: "CA",
     phone: "+15147310833",
     phoneDisplay: "514-731-0833",
+    participation: "directory",
     status: "call",
     statusLabel: "Call the confidential support line",
     hours: "Support line available 24 hours a day, 7 days a week",
@@ -179,6 +253,7 @@ export const shelters: Shelter[] = [
     note: "The location is confidential for safety. All services are free.",
     sourceUrl: "https://www.aubergeshalom.org/",
     sourceLabel: "Auberge Shalom",
+    sourceCheckedAt: "2026-07-28",
     confidentialAddress: true,
   },
 ];
@@ -193,4 +268,3 @@ export const shelterFilters = [
   "Meals",
   "Showers",
 ];
-
