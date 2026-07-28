@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { shelters } from "../shelter-data";
+import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import type { PublicShelter, PublicShelterResponse } from "../directory-types";
 
 const provinces = [
   ["AB", "Alberta"], ["BC", "British Columbia"], ["MB", "Manitoba"],
@@ -11,9 +12,17 @@ const provinces = [
 ];
 
 export default function JoinHavenNearPage() {
+  const [shelters, setShelters] = useState<PublicShelter[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState("");
+
+  useEffect(() => {
+    fetch("/api/shelters?limit=200")
+      .then((response) => response.json())
+      .then((result: PublicShelterResponse) => setShelters(result.shelters || []))
+      .catch(() => setShelters([]));
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,10 +56,10 @@ export default function JoinHavenNearPage() {
     return (
       <main className="join-page">
         <header className="admin-header">
-          <a className="brand" href="/" aria-label="HavenNear home">
+          <Link className="brand" href="/" aria-label="HavenNear home">
             <span className="brand-mark" aria-hidden="true"><span /></span><span>HavenNear</span>
-          </a>
-          <a className="admin-back" href="/">Back to shelter search</a>
+          </Link>
+          <Link className="admin-back" href="/">Back to shelter search</Link>
         </header>
         <section className="join-confirmation">
           <span className="confirmation-mark" aria-hidden="true">✓</span>
@@ -61,7 +70,7 @@ export default function JoinHavenNearPage() {
             Nothing in this request changes a public listing automatically.
           </p>
           <div className="request-number"><span>Reference</span><strong>{requestId}</strong></div>
-          <a className="admin-primary inline-button" href="/">Return to the directory</a>
+          <Link className="admin-primary inline-button" href="/">Return to the directory</Link>
         </section>
       </main>
     );
@@ -70,10 +79,10 @@ export default function JoinHavenNearPage() {
   return (
     <main className="join-page">
       <header className="admin-header">
-        <a className="brand" href="/" aria-label="HavenNear home">
+        <Link className="brand" href="/" aria-label="HavenNear home">
           <span className="brand-mark" aria-hidden="true"><span /></span><span>HavenNear</span>
-        </a>
-        <a className="admin-back" href="/">Back to shelter search</a>
+        </Link>
+        <Link className="admin-back" href="/">Back to shelter search</Link>
       </header>
 
       <section className="join-hero">

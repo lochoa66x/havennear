@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { shelterFilters, shelters } from "./shelter-data";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { shelterFilters, type PublicShelter, type PublicShelterResponse } from "./directory-types";
 
 type UserLocation = { latitude: number; longitude: number };
 
@@ -38,11 +38,30 @@ const matchesFilter = (groups: string[], services: string[], filter: string) => 
 };
 
 export default function Home() {
+  const [shelters, setShelters] = useState<PublicShelter[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(true);
+  const [directoryError, setDirectoryError] = useState("");
   const [query, setQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [notice, setNotice] = useState("Showing the Montréal pilot directory");
   const [locating, setLocating] = useState(false);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/shelters?limit=200", { signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json() as PublicShelterResponse & { error?: string };
+        if (!response.ok) throw new Error(result.error || "The directory is temporarily unavailable.");
+        setShelters(result.shelters);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setDirectoryError("The directory could not load. Please call 211 for current local help.");
+      })
+      .finally(() => setDirectoryLoading(false));
+    return () => controller.abort();
+  }, []);
 
   const visibleShelters = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -77,7 +96,7 @@ export default function Home() {
         if (b.distanceKm === null) return -1;
         return a.distanceKm - b.distanceKm;
       });
-  }, [activeFilters, query, userLocation]);
+  }, [activeFilters, query, shelters, userLocation]);
 
   function toggleFilter(filter: string) {
     setActiveFilters((current) =>
@@ -248,7 +267,7 @@ export default function Home() {
                     {shelter.participation === "participating" ? "Participating shelter" : "Directory listing"}
                   </span>
                 </div>
-                <div className="status status-call"><span aria-hidden="true" />{shelter.statusLabel}</div>
+                <div className={`status status-${shelter.status}`}><span aria-hidden="true" />{shelter.statusLabel}</div>
                 <h3>{shelter.name}</h3>
                 {shelter.distanceKm !== null && (
                   <p className="calculated-distance">{formatDistance(shelter.distanceKm)} <span>· straight-line</span></p>
@@ -261,7 +280,13 @@ export default function Home() {
                 </div>
               </div>
               <div className="shelter-action">
-                <p className="confirmed">Capacity not connected</p>
+                <p className="confirmed">
+                  {shelter.status === "call"
+                    ? "Capacity not connected"
+                    : shelter.spacesAvailable !== undefined
+                      ? `${shelter.spacesAvailable} spaces reported`
+                      : "Fresh shelter update"}
+                </p>
                 <p className="intake">{shelter.intake}</p>
                 <p className="phone-line">{shelter.phoneDisplay}</p>
                 <div className="card-buttons">
@@ -284,11 +309,16 @@ export default function Home() {
                 <a className="claim-link" href="/join">Shelter staff: claim or update this listing</a>
               </div>
             </article>
-          )) : (
+          )) : directoryLoading ? (
             <div className="empty-state">
-              <h3>No listings match every filter.</h3>
-              <p>Remove one or more filters, or call 211 for help finding another resource.</p>
-              <button type="button" onClick={() => { setActiveFilters([]); setQuery(""); }}>Clear filters</button>
+              <h3>Loading the shelter directory…</h3>
+              <p>Public listings are being checked.</p>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <h3>{directoryError ? "The directory is temporarily unavailable." : "No listings match every filter."}</h3>
+              <p>{directoryError || "Remove one or more filters, or call 211 for help finding another resource."}</p>
+              {!directoryError && <button type="button" onClick={() => { setActiveFilters([]); setQuery(""); }}>Clear filters</button>}
             </div>
           )}
         </div>

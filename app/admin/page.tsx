@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 type PublicStatus = "available" | "limited" | "full" | "call";
 
@@ -38,11 +39,11 @@ export default function ShelterAdminPage() {
     return (
       <main className="admin-page">
         <header className="admin-header">
-          <a className="brand" href="/" aria-label="HavenNear home">
+          <Link className="brand" href="/" aria-label="HavenNear home">
             <span className="brand-mark" aria-hidden="true"><span /></span>
             <span>HavenNear</span>
-          </a>
-          <a className="admin-back" href="/">Back to shelter search</a>
+          </Link>
+          <Link className="admin-back" href="/">Back to shelter search</Link>
         </header>
 
         <section className="admin-welcome">
@@ -62,7 +63,8 @@ export default function ShelterAdminPage() {
             <button className="admin-primary" type="button" onClick={() => setPreviewOpen(true)}>
               Preview the staff workspace
             </button>
-            <a className="admin-secondary-link" href="/join">Request verified shelter access</a>
+            <Link className="admin-secondary-link" href="/join">Request verified shelter access</Link>
+            <Link className="admin-secondary-link" href="/admin/directory">Open private directory review</Link>
           </div>
 
           <aside className="access-card">
@@ -83,13 +85,13 @@ export default function ShelterAdminPage() {
   return (
     <main className="admin-page">
       <header className="admin-header">
-        <a className="brand" href="/" aria-label="HavenNear home">
+        <Link className="brand" href="/" aria-label="HavenNear home">
           <span className="brand-mark" aria-hidden="true"><span /></span>
           <span>HavenNear</span>
-        </a>
+        </Link>
         <div className="admin-header-actions">
           <span className="preview-badge">Preview only</span>
-          <a className="admin-back" href="/">Public shelter search</a>
+          <Link className="admin-back" href="/">Public shelter search</Link>
         </div>
       </header>
 
