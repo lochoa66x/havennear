@@ -21,10 +21,20 @@ async function authenticatedUser() {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await authenticatedUser();
   if (!user) return Response.json({ error: "Authentication required." }, { status: 401 });
-  return Response.json({ user, ...(await getDirectoryReviewDashboard()) });
+  const url = new URL(request.url);
+  const page = Number.parseInt(url.searchParams.get("page") || "1", 10);
+  return Response.json({
+    user,
+    ...(await getDirectoryReviewDashboard({
+      search: url.searchParams.get("search") || "",
+      province: url.searchParams.get("province") || "",
+      page: Number.isFinite(page) ? page : 1,
+      limit: 25,
+    })),
+  });
 }
 
 export async function POST(request: Request) {

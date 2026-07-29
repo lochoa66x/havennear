@@ -68,6 +68,15 @@ export const shelterSources = sqliteTable("shelter_sources", {
   status: text("status").notNull().default("active"),
 });
 
+export const shelterExternalIdentifiers = sqliteTable("shelter_external_identifiers", {
+  id: text("id").primaryKey(),
+  shelterId: text("shelter_id").notNull(),
+  sourceSystem: text("source_system").notNull(),
+  externalId: text("external_id").notNull(),
+  sourceVersion: text("source_version"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 export const directoryImportBatches = sqliteTable("directory_import_batches", {
   id: text("id").primaryKey(),
   datasetName: text("dataset_name").notNull(),

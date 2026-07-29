@@ -91,3 +91,52 @@ test("Phase 2 schema stores shelter operations, not guest records", async () => 
   assert.match(participation, /shelter_staff_access/);
   assert.doesNotMatch(participation, /guest_name|date_of_birth|health_details|case_notes/);
 });
+
+test("NSPL 2024 migration stages all 1,114 federal records privately", async () => {
+  const migration = await read("drizzle/0003_nspl_2024_candidates.sql");
+  const stagedIds = migration.match(/stage_nspl_2024_\d+/g) || [];
+
+  assert.equal(new Set(stagedIds).size, 1114);
+  assert.match(migration, /'batch_nspl_2024'/);
+  assert.match(migration, /'Open Government Licence – Canada 2\.0'/);
+  assert.match(migration, /'6f73b3febcb04ddeb91a9a7368f12d826058b8c4aa0e68ee102aade2f0e190f3'/);
+  assert.match(migration, /'pending'/);
+  assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
+});
+
+test("federal candidates retain identifiers and permanent capacity without claiming live space", async () => {
+  const [directory, migration] = await Promise.all([
+    read("db/directory.ts"),
+    read("drizzle/0003_nspl_2024_candidates.sql"),
+  ]);
+
+  assert.match(directory, /shelter_external_identifiers/);
+  assert.match(directory, /federalServiceProviderId/);
+  assert.match(directory, /total_beds/);
+  assert.match(migration, /Federal bed count is permanent capacity, not live availability/);
+});
+
+test("national review supports scoped search and pagination", async () => {
+  const [directory, client] = await Promise.all([
+    read("db/directory.ts"),
+    read("app/admin/directory/DirectoryReviewClient.tsx"),
+  ]);
+
+  assert.match(directory, /json_extract\(parsed_json, '\$\.federalServiceProviderId'\)/);
+  assert.match(directory, /json_extract\(parsed_json, '\$\.provinceCode'\)/);
+  assert.match(directory, /LIMIT \? OFFSET \?/);
+  assert.match(client, /Search federal ID, shelter, organization, or city/);
+  assert.match(client, /Permanent beds are not current availability/);
+});
+
+test("public coverage reports the federal foundation but public results stay published-only", async () => {
+  const [page, directory] = await Promise.all([
+    read("app/page.tsx"),
+    read("db/directory.ts"),
+  ]);
+
+  assert.match(page, /federal shelter records under verification/);
+  assert.match(page, /Open Government Licence/);
+  assert.match(directory, /federalCandidates/);
+  assert.match(directory, /s\.publication_state = 'published'/);
+});

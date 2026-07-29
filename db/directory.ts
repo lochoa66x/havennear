@@ -56,6 +56,16 @@ const schemaStatements = [
     fields_supported_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'active'
   )`,
+  `CREATE TABLE IF NOT EXISTS shelter_external_identifiers (
+    id TEXT PRIMARY KEY NOT NULL,
+    shelter_id TEXT NOT NULL,
+    source_system TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    source_version TEXT,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS shelter_external_source_id_idx
+    ON shelter_external_identifiers(source_system, external_id)`,
   `CREATE TABLE IF NOT EXISTS directory_import_batches (
     id TEXT PRIMARY KEY NOT NULL,
     dataset_name TEXT NOT NULL,
@@ -227,25 +237,37 @@ export async function listPublishedShelters(options: {
     bindings.push(options.city);
   }
   const where = clauses.join(" AND ");
-  const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM shelters s WHERE ${where}`)
-    .bind(...bindings).first<{ total: number }>();
-  const result = await env.DB.prepare(`
-    SELECT s.*, src.source_organization, src.url AS source_url, src.verified_at
-    FROM shelters s
-    LEFT JOIN shelter_sources src ON src.id = (
-      SELECT id FROM shelter_sources WHERE shelter_id = s.id AND status = 'active'
-      ORDER BY COALESCE(verified_at, retrieved_at) DESC LIMIT 1
-    )
-    WHERE ${where}
-    ORDER BY s.city COLLATE NOCASE, s.name COLLATE NOCASE
-    LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, (page - 1) * limit).all<DirectoryRow>();
+  const [count, result, federalCoverage] = await Promise.all([
+    env.DB.prepare(`SELECT COUNT(*) AS total FROM shelters s WHERE ${where}`)
+      .bind(...bindings).first<{ total: number }>(),
+    env.DB.prepare(`
+      SELECT s.*, src.source_organization, src.url AS source_url, src.verified_at
+      FROM shelters s
+      LEFT JOIN shelter_sources src ON src.id = (
+        SELECT id FROM shelter_sources WHERE shelter_id = s.id AND status = 'active'
+        ORDER BY COALESCE(verified_at, retrieved_at) DESC LIMIT 1
+      )
+      WHERE ${where}
+      ORDER BY s.city COLLATE NOCASE, s.name COLLATE NOCASE
+      LIMIT ? OFFSET ?
+    `).bind(...bindings, limit, (page - 1) * limit).all<DirectoryRow>(),
+    env.DB.prepare(`
+      SELECT total_rows FROM directory_import_batches WHERE id = 'batch_nspl_2024'
+    `).first<{ total_rows: number }>(),
+  ]);
 
   return {
     shelters: result.results.map(toPublicShelter),
     page,
     limit,
     total: count?.total ?? 0,
+    coverage: {
+      published: count?.total ?? 0,
+      federalCandidates: federalCoverage?.total_rows ?? 0,
+      provincesAndTerritories: federalCoverage ? 13 : 0,
+      sourceLabel: "Government of Canada NSPL",
+      sourceYear: 2024,
+    },
   };
 }
 
@@ -396,7 +418,12 @@ async function audit(actorEmail: string, action: string, options: {
 }
 
 export async function updateStagingRecord(id: string, parsed: Record<string, unknown>, notes: string, actorEmail: string) {
-  const allowed = ["name", "shelterType", "address", "city", "provinceCode", "postalCode", "phone", "phoneDisplay", "website", "hours", "intake", "groups", "services", "confidentialAddress"];
+  const allowed = [
+    "name", "shelterType", "address", "city", "provinceCode", "postalCode",
+    "phone", "phoneDisplay", "website", "hours", "intake", "groups", "services",
+    "confidentialAddress", "totalBeds", "federalServiceProviderId",
+    "umbrellaOrganization", "targetClientele", "genderServed", "sourceYear",
+  ];
   const clean = Object.fromEntries(allowed.filter((key) => key in parsed).map((key) => [key, parsed[key]]));
   await env.DB.prepare(`
     UPDATE directory_staging_records SET parsed_json = ?, reviewer_notes = ? WHERE id = ? AND review_state = 'pending'
@@ -414,9 +441,9 @@ async function sourceForStage(stage: DirectoryRow & { parsed: Record<string, unk
   const batch = await env.DB.prepare(`
     SELECT * FROM directory_import_batches WHERE id = ?
   `).bind(stage.batch_id).first<DirectoryRow>();
-  if (!batch) return null;
+  if (!batch) return [];
   const sourceId = `source_${crypto.randomUUID()}`;
-  return env.DB.prepare(`
+  const statements = [env.DB.prepare(`
     INSERT INTO shelter_sources (
       id, shelter_id, staging_record_id, source_organization, title, url,
       source_type, licence, retrieved_at, fields_supported_json, status
@@ -424,7 +451,19 @@ async function sourceForStage(stage: DirectoryRow & { parsed: Record<string, unk
   `).bind(
     sourceId, shelterId, stage.id, batch.publisher, batch.dataset_name, batch.source_url,
     batch.licence || null, batch.imported_at, JSON.stringify(Object.keys(stage.parsed)),
-  );
+  )];
+  const federalId = text(stage.parsed.federalServiceProviderId);
+  if (federalId) {
+    statements.push(env.DB.prepare(`
+      INSERT OR IGNORE INTO shelter_external_identifiers (
+        id, shelter_id, source_system, external_id, source_version, created_at
+      ) VALUES (?, ?, 'ca_hicc_nspl', ?, ?, ?)
+    `).bind(
+      `external_nspl_${federalId}`, shelterId, federalId,
+      text(stage.parsed.sourceYear) || text(batch.dataset_version), Date.now(),
+    ));
+  }
+  return statements;
 }
 
 function shelterBindings(id: string, parsed: Record<string, unknown>, now: number) {
@@ -441,6 +480,7 @@ function shelterBindings(id: string, parsed: Record<string, unknown>, now: numbe
     text(parsed.intake) || "Call before travelling",
     JSON.stringify(Array.isArray(parsed.groups) ? parsed.groups : []),
     JSON.stringify(Array.isArray(parsed.services) ? parsed.services : []),
+    typeof parsed.totalBeds === "number" ? parsed.totalBeds : null,
     now, now,
   ];
 }
@@ -449,20 +489,20 @@ export async function approveStagingRecord(id: string, actorEmail: string) {
   const stage = await getStage(id);
   const shelterId = `shelter_${crypto.randomUUID()}`;
   const now = Date.now();
-  const sourceStatement = await sourceForStage(stage, shelterId);
+  const sourceStatements = await sourceForStage(stage, shelterId);
   await env.DB.batch([
     env.DB.prepare(`
       INSERT INTO shelters (
         id, slug, name, shelter_type, address, city, province_code, postal_code,
         confidential_address, phone, phone_display, website, hours, intake,
-        groups_json, services_json, publication_state, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?)
+        groups_json, services_json, total_beds, publication_state, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?)
     `).bind(...shelterBindings(shelterId, stage.parsed, now)),
     env.DB.prepare(`
       UPDATE directory_staging_records
       SET review_state = 'approved', approved_shelter_id = ?, reviewed_at = ? WHERE id = ?
     `).bind(shelterId, now, id),
-    ...(sourceStatement ? [sourceStatement] : []),
+    ...sourceStatements,
   ]);
   await audit(actorEmail, "approved_for_publication", { shelterId, stagingRecordId: id, fields: Object.keys(stage.parsed) });
   return shelterId;
@@ -472,20 +512,20 @@ export async function mergeStagingRecord(id: string, shelterId: string, actorEma
   const stage = await getStage(id);
   const now = Date.now();
   const values = shelterBindings(shelterId, stage.parsed, now);
-  const sourceStatement = await sourceForStage(stage, shelterId);
+  const sourceStatements = await sourceForStage(stage, shelterId);
   await env.DB.batch([
     env.DB.prepare(`
       UPDATE shelters SET
         name = ?, shelter_type = ?, address = ?, city = ?, province_code = ?, postal_code = ?,
         confidential_address = ?, phone = ?, phone_display = ?, website = ?, hours = ?, intake = ?,
-        groups_json = ?, services_json = ?, updated_at = ?
+        groups_json = ?, services_json = ?, total_beds = ?, updated_at = ?
       WHERE id = ?
-    `).bind(...values.slice(2, 16), now, shelterId),
+    `).bind(...values.slice(2, 17), now, shelterId),
     env.DB.prepare(`
       UPDATE directory_staging_records
       SET review_state = 'merged', approved_shelter_id = ?, reviewed_at = ? WHERE id = ?
     `).bind(shelterId, now, id),
-    ...(sourceStatement ? [sourceStatement] : []),
+    ...sourceStatements,
   ]);
   await audit(actorEmail, "merged", { shelterId, stagingRecordId: id, fields: Object.keys(stage.parsed) });
 }
@@ -512,25 +552,74 @@ export async function archiveShelter(id: string, reason: string, actorEmail: str
   await audit(actorEmail, "archived", { shelterId: id, fields: ["publication_state"], reason });
 }
 
-export async function getDirectoryReviewDashboard() {
+export async function getDirectoryReviewDashboard(options: {
+  search?: string;
+  province?: string;
+  page?: number;
+  limit?: number;
+} = {}) {
   await ensureDirectorySchema();
   await ensureMontrealSeed();
-  const [counts, batches, staging, shelters, activity] = await Promise.all([
+  const search = (options.search || "").trim().slice(0, 120);
+  const province = (options.province || "").trim().toUpperCase().slice(0, 2);
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(10, options.limit || 25));
+  const clauses = ["review_state = 'pending'"];
+  const bindings: unknown[] = [];
+  if (search) {
+    clauses.push(`(
+      LOWER(json_extract(parsed_json, '$.name')) LIKE ? OR
+      LOWER(json_extract(parsed_json, '$.city')) LIKE ? OR
+      LOWER(json_extract(parsed_json, '$.umbrellaOrganization')) LIKE ? OR
+      CAST(json_extract(parsed_json, '$.federalServiceProviderId') AS TEXT) = ?
+    )`);
+    const pattern = `%${search.toLowerCase()}%`;
+    bindings.push(pattern, pattern, pattern, search);
+  }
+  if (province) {
+    clauses.push(`UPPER(json_extract(parsed_json, '$.provinceCode')) = ?`);
+    bindings.push(province);
+  }
+  const stagingWhere = clauses.join(" AND ");
+
+  const [counts, filteredCount, batches, staging, shelters, activity] = await Promise.all([
     env.DB.prepare(`
       SELECT
         (SELECT COUNT(*) FROM shelters WHERE publication_state = 'published') AS published,
         (SELECT COUNT(*) FROM shelters WHERE publication_state = 'approved') AS approved,
         (SELECT COUNT(*) FROM directory_staging_records WHERE review_state = 'pending') AS pending,
-        (SELECT COUNT(*) FROM directory_staging_records WHERE review_state = 'pending' AND duplicate_candidates_json != '[]') AS duplicates
+        (
+          SELECT COUNT(*) FROM directory_staging_records stage
+          WHERE stage.review_state = 'pending' AND (
+            stage.duplicate_candidates_json != '[]' OR EXISTS (
+              SELECT 1 FROM shelters s
+              WHERE LOWER(s.name) = LOWER(json_extract(stage.parsed_json, '$.name'))
+                AND LOWER(s.city) = LOWER(json_extract(stage.parsed_json, '$.city'))
+            )
+          )
+        ) AS duplicates
     `).first<DirectoryRow>(),
-    env.DB.prepare(`SELECT * FROM directory_import_batches ORDER BY imported_at DESC LIMIT 20`).all<DirectoryRow>(),
-    env.DB.prepare(`SELECT * FROM directory_staging_records ORDER BY created_at DESC LIMIT 100`).all<DirectoryRow>(),
     env.DB.prepare(`
-      SELECT id, name, city, province_code, publication_state, confidential_address, updated_at
+      SELECT COUNT(*) AS total FROM directory_staging_records WHERE ${stagingWhere}
+    `).bind(...bindings).first<{ total: number }>(),
+    env.DB.prepare(`SELECT * FROM directory_import_batches ORDER BY imported_at DESC LIMIT 20`).all<DirectoryRow>(),
+    env.DB.prepare(`
+      SELECT * FROM directory_staging_records
+      WHERE ${stagingWhere}
+      ORDER BY
+        CASE WHEN batch_id = 'batch_nspl_2024' THEN 1 ELSE 0 END,
+        LOWER(json_extract(parsed_json, '$.provinceCode')),
+        LOWER(json_extract(parsed_json, '$.city')),
+        LOWER(json_extract(parsed_json, '$.name'))
+      LIMIT ? OFFSET ?
+    `).bind(...bindings, limit, (page - 1) * limit).all<DirectoryRow>(),
+    env.DB.prepare(`
+      SELECT id, name, city, province_code, phone, publication_state, confidential_address, updated_at
       FROM shelters ORDER BY name COLLATE NOCASE
     `).all<DirectoryRow>(),
     env.DB.prepare(`SELECT * FROM directory_review_activity ORDER BY created_at DESC LIMIT 50`).all<DirectoryRow>(),
   ]);
+  const shelterRows = shelters.results;
   return {
     counts: counts ?? { published: 0, approved: 0, pending: 0, duplicates: 0 },
     batches: batches.results,
@@ -538,9 +627,30 @@ export async function getDirectoryReviewDashboard() {
       ...row,
       parsed: JSON.parse(text(row.parsed_json)),
       warnings: jsonArray(row.validation_warnings_json),
-      duplicateCandidates: JSON.parse(text(row.duplicate_candidates_json) || "[]"),
+      duplicateCandidates: (() => {
+        const stored = JSON.parse(text(row.duplicate_candidates_json) || "[]") as unknown[];
+        if (stored.length) return stored;
+        const parsed = JSON.parse(text(row.parsed_json)) as Record<string, unknown>;
+        const name = normalize(text(parsed.name));
+        const city = normalize(text(parsed.city));
+        const phone = normalize(text(parsed.phone));
+        return shelterRows.filter((candidate) =>
+          (name && city && normalize(text(candidate.name)) === name && normalize(text(candidate.city)) === city) ||
+          (phone && normalize(text(candidate.phone)) === phone),
+        ).slice(0, 5).map((candidate) => ({
+          id: candidate.id, name: candidate.name, city: candidate.city,
+        }));
+      })(),
     })),
-    shelters: shelters.results,
+    shelters: shelterRows,
     activity: activity.results,
+    review: {
+      page,
+      limit,
+      filtered: filteredCount?.total ?? 0,
+      totalPages: Math.max(1, Math.ceil((filteredCount?.total ?? 0) / limit)),
+      search,
+      province,
+    },
   };
 }

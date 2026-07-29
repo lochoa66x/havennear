@@ -19,6 +19,12 @@ type ParsedShelter = {
   groups?: string[];
   services?: string[];
   confidentialAddress?: boolean;
+  totalBeds?: number;
+  federalServiceProviderId?: string;
+  umbrellaOrganization?: string;
+  targetClientele?: string;
+  genderServed?: string;
+  sourceYear?: number;
 };
 type Stage = Row & {
   id: string;
@@ -34,6 +40,14 @@ type Dashboard = {
   staging: Stage[];
   shelters: Row[];
   activity: Row[];
+  review: {
+    page: number;
+    limit: number;
+    filtered: number;
+    totalPages: number;
+    search: string;
+    province: string;
+  };
 };
 
 const emptyDashboard: Dashboard = {
@@ -42,6 +56,7 @@ const emptyDashboard: Dashboard = {
   staging: [],
   shelters: [],
   activity: [],
+  review: { page: 1, limit: 25, filtered: 0, totalPages: 1, search: "", province: "" },
 };
 
 function displayDate(value: unknown) {
@@ -53,10 +68,19 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [province, setProvince] = useState("");
+  const [page, setPage] = useState(1);
   const [drafts, setDrafts] = useState<Record<string, ParsedShelter & { notes?: string; mergeTarget?: string }>>({});
 
   const refresh = useCallback(async () => {
-    const response = await fetch("/api/admin/directory", { cache: "no-store" });
+    const parameters = new URLSearchParams({
+      page: String(page),
+      ...(appliedSearch ? { search: appliedSearch } : {}),
+      ...(province ? { province } : {}),
+    });
+    const response = await fetch(`/api/admin/directory?${parameters}`, { cache: "no-store" });
     const result = await response.json() as Dashboard & { error?: string };
     if (!response.ok) throw new Error(result.error || "The review workspace could not load.");
     setDashboard(result);
@@ -64,7 +88,7 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
       stage.id,
       { ...stage.parsed, notes: stage.reviewer_notes || "" },
     ])));
-  }, []);
+  }, [appliedSearch, page, province]);
 
   useEffect(() => {
     // The first fetch is the external synchronization this effect owns.
@@ -199,8 +223,32 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
             <section className="review-panel">
               <div className="review-panel-heading">
                 <div><p>Step 2</p><h2>Correct and decide</h2></div>
-                <span>{pending.length} pending</span>
+                <span>{dashboard.review.filtered} matches</span>
               </div>
+              <form className="candidate-search" onSubmit={(event) => {
+                event.preventDefault();
+                setPage(1);
+                setAppliedSearch(searchDraft.trim());
+              }}>
+                <label>
+                  Search federal ID, shelter, organization, or city
+                  <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Example: Ottawa or 4111" />
+                </label>
+                <label>
+                  Province or territory
+                  <select value={province} onChange={(event) => { setProvince(event.target.value); setPage(1); }}>
+                    <option value="">All Canada</option>
+                    {["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"].map((code) => <option key={code} value={code}>{code}</option>)}
+                  </select>
+                </label>
+                <button type="submit">Search candidates</button>
+                {(appliedSearch || province) && <button type="button" className="secondary" onClick={() => {
+                  setSearchDraft("");
+                  setAppliedSearch("");
+                  setProvince("");
+                  setPage(1);
+                }}>Clear</button>}
+              </form>
               {!pending.length ? <p className="review-empty">No records are waiting for review.</p> : (
                 <div className="staging-list">
                   {pending.map((stage) => {
@@ -215,6 +263,15 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
                         {stage.warnings.length > 0 && <ul className="warning-list">{stage.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
                         {stage.duplicateCandidates.length > 0 && (
                           <p className="duplicate-list">Compare with: {stage.duplicateCandidates.map((item) => `${item.name} (${item.city})`).join(", ")}</p>
+                        )}
+                        {draft.federalServiceProviderId && (
+                          <div className="federal-source-card">
+                            <strong>Government of Canada foundation record</strong>
+                            <span>NSPL {draft.sourceYear || 2024} · Provider ID {draft.federalServiceProviderId}</span>
+                            <span>{draft.umbrellaOrganization || "No umbrella organization listed"} · {draft.shelterType || "Type not listed"}</span>
+                            <span>{draft.totalBeds ?? "Unknown"} permanent beds · {draft.targetClientele || "Clientele not listed"} · {draft.genderServed || "Gender not listed"}</span>
+                            <small>Permanent beds are not current availability. Verify every public contact field before approval.</small>
+                          </div>
                         )}
                         <div className="stage-fields">
                           <label>Name<input value={draft.name || ""} onChange={(event) => updateDraft(stage.id, "name", event.target.value)} /></label>
@@ -254,6 +311,13 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
                       </article>
                     );
                   })}
+                </div>
+              )}
+              {dashboard.review.totalPages > 1 && (
+                <div className="candidate-pagination">
+                  <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
+                  <span>Page {dashboard.review.page} of {dashboard.review.totalPages}</span>
+                  <button type="button" disabled={page >= dashboard.review.totalPages} onClick={() => setPage((current) => current + 1)}>Next</button>
                 </div>
               )}
             </section>

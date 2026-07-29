@@ -41,6 +41,7 @@ export default function Home() {
   const [shelters, setShelters] = useState<PublicShelter[]>([]);
   const [directoryLoading, setDirectoryLoading] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
+  const [federalCandidates, setFederalCandidates] = useState(0);
   const [query, setQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [notice, setNotice] = useState("Showing the Montréal pilot directory");
@@ -54,6 +55,7 @@ export default function Home() {
         const result = await response.json() as PublicShelterResponse & { error?: string };
         if (!response.ok) throw new Error(result.error || "The directory is temporarily unavailable.");
         setShelters(result.shelters);
+        setFederalCandidates(result.coverage?.federalCandidates || 0);
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -141,8 +143,8 @@ export default function Home() {
   return (
     <main>
       <div className="prototype-note" role="status">
-        <span>Canada-ready directory · Montréal pilot data</span>
-        <span>Every suitable shelter can appear · Live reports require verified participation</span>
+        <span>{federalCandidates ? `${federalCandidates.toLocaleString()} federal shelter records under verification` : "Canada-ready directory · Montréal pilot data"}</span>
+        <span>Only verified contact records are public · Live reports require participation</span>
       </div>
 
       <header className="site-header">
@@ -364,6 +366,8 @@ export default function Home() {
           <a href="#results">Montréal directory</a>
           <a href="/join">Join the network</a>
           <a href="/admin">For shelters</a>
+          <a href="https://open.canada.ca/data/en/dataset/7e0189e3-8595-4e62-a4e9-4fed6f265e10" target="_blank" rel="noreferrer">Canada NSPL source</a>
+          <a href="https://open.canada.ca/en/open-government-licence-canada" target="_blank" rel="noreferrer">Open Government Licence</a>
         </div>
       </footer>
     </main>

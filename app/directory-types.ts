@@ -37,6 +37,13 @@ export type PublicShelterResponse = {
   page: number;
   limit: number;
   total: number;
+  coverage: {
+    published: number;
+    federalCandidates: number;
+    provincesAndTerritories: number;
+    sourceLabel: string;
+    sourceYear: number;
+  };
 };
 
 export const shelterFilters = [
