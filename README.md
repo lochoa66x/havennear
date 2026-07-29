@@ -1,98 +1,91 @@
-# vinext-starter
+# HavenNear
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+HavenNear is a free, privacy-first Canadian shelter directory. It helps people
+find nearby shelter services and lets participating shelters share time-sensitive
+availability without collecting information about the people seeking help.
 
-## Prerequisites
+> **For Razan — the original author of the idea.**
+
+## Project promise
+
+- Access for people seeking help is free.
+- Human suffering is never a revenue source.
+- Shelter employees and contractors may be fairly paid for their labour.
+- Public directory facts are kept separate from shelter intake and case records.
+- A person's precise location stays on their device when distance is calculated.
+- Community corrections are private, reviewed by a human, and never auto-published.
+- Shelter availability is time-sensitive and must never be treated as a guaranteed bed.
+
+Read the complete [Project Charter](PROJECT_CHARTER.md) and
+[Privacy Policy](PRIVACY.md).
+
+## What HavenNear includes
+
+- A mobile-first search experience for nearby published shelters
+- Clear telephone, hours, eligibility, intake, service, and accessibility details
+- Shelter-reported availability with freshness and expiry safeguards
+- Anonymous community correction suggestions
+- Protected shelter participation and directory-review workspaces
+- A staged Canadian directory foundation based on public government data
+
+HavenNear is a connection and directory tool. It does not register shelter
+guests, reserve beds, make intake decisions, or store case-management records.
+
+## Current status
+
+HavenNear is under active development. Directory information must be verified
+before publication, and users should call a shelter or 211 when information is
+uncertain or urgent.
+
+## Local development
+
+Requirements:
 
 - Node.js `>=22.13.0`
-
-## Quick Start
+- npm
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+Quality checks:
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run lint
+npm test
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+The application currently targets a Cloudflare Worker-compatible runtime and
+uses a D1 database binding named `DB`.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Contributing
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+Please read:
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Privacy Policy](PRIVACY.md)
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+Never submit real guest, seeker, health, case, intake, or confidential shelter
+location information in source code, issues, pull requests, screenshots, tests,
+or sample data.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## Licence
 
-## Useful Commands
+HavenNear is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE.md). Charitable organizations,
+educational institutions, public research organizations, public-safety and
+public-health organizations, environmental organizations, and government
+institutions are permitted users under that licence.
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+The non-commercial restriction means this project is not described as
+OSI-approved open-source software. No separate commercial licence is offered by
+this repository.
 
-## Learn More
+## Attribution
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+The original HavenNear idea is Razan's. The software implementation is the work
+of its contributors. Keep the Razan dedication and all required licence notices
+with copies and modified versions.
