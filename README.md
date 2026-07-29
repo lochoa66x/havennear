@@ -45,15 +45,15 @@ Requirements:
 - npm
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Quality checks:
 
 ```bash
-npm run lint
-npm test
+pnpm run lint
+pnpm test
 ```
 
 The application currently targets a Cloudflare Worker-compatible runtime and
