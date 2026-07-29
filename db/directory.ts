@@ -555,6 +555,8 @@ export async function archiveShelter(id: string, reason: string, actorEmail: str
 export async function getDirectoryReviewDashboard(options: {
   search?: string;
   province?: string;
+  shelterType?: string;
+  focus?: string;
   page?: number;
   limit?: number;
 } = {}) {
@@ -562,6 +564,8 @@ export async function getDirectoryReviewDashboard(options: {
   await ensureMontrealSeed();
   const search = (options.search || "").trim().slice(0, 120);
   const province = (options.province || "").trim().toUpperCase().slice(0, 2);
+  const shelterType = (options.shelterType || "").trim().toLowerCase();
+  const focus = (options.focus || "").trim().toLowerCase();
   const page = Math.max(1, options.page || 1);
   const limit = Math.min(100, Math.max(10, options.limit || 25));
   const clauses = ["review_state = 'pending'"];
@@ -579,6 +583,28 @@ export async function getDirectoryReviewDashboard(options: {
   if (province) {
     clauses.push(`UPPER(json_extract(parsed_json, '$.provinceCode')) = ?`);
     bindings.push(province);
+  }
+  if (shelterType === "emergency") {
+    clauses.push(`LOWER(json_extract(parsed_json, '$.shelterType')) LIKE '%emergency%'`);
+  } else if (shelterType === "transitional") {
+    clauses.push(`LOWER(json_extract(parsed_json, '$.shelterType')) LIKE '%transitional%'`);
+  }
+  const fieldValue = (field: string) => `TRIM(COALESCE(json_extract(parsed_json, '$.${field}'), ''))`;
+  if (focus === "duplicates") {
+    clauses.push(`duplicate_candidates_json != '[]'`);
+  } else if (focus === "missing_phone") {
+    clauses.push(`${fieldValue("phone")} = ''`);
+  } else if (focus === "missing_location") {
+    clauses.push(`COALESCE(json_extract(parsed_json, '$.confidentialAddress'), 0) != 1 AND ${fieldValue("address")} = ''`);
+  } else if (focus === "missing_hours") {
+    clauses.push(`${fieldValue("hours")} = ''`);
+  } else if (focus === "missing_intake") {
+    clauses.push(`${fieldValue("intake")} = ''`);
+  } else if (focus === "core_complete") {
+    clauses.push(`${fieldValue("phone")} != ''`);
+    clauses.push(`${fieldValue("hours")} != ''`);
+    clauses.push(`${fieldValue("intake")} != ''`);
+    clauses.push(`(COALESCE(json_extract(parsed_json, '$.confidentialAddress'), 0) = 1 OR ${fieldValue("address")} != '')`);
   }
   const stagingWhere = clauses.join(" AND ");
 
@@ -651,6 +677,8 @@ export async function getDirectoryReviewDashboard(options: {
       totalPages: Math.max(1, Math.ceil((filteredCount?.total ?? 0) / limit)),
       search,
       province,
+      shelterType,
+      focus,
     },
   };
 }

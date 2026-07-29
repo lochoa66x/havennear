@@ -31,6 +31,8 @@ export async function GET(request: Request) {
     ...(await getDirectoryReviewDashboard({
       search: url.searchParams.get("search") || "",
       province: url.searchParams.get("province") || "",
+      shelterType: url.searchParams.get("shelterType") || "",
+      focus: url.searchParams.get("focus") || "",
       page: Number.isFinite(page) ? page : 1,
       limit: 25,
     })),

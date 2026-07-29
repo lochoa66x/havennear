@@ -129,6 +129,24 @@ test("national review supports scoped search and pagination", async () => {
   assert.match(client, /Permanent beds are not current availability/);
 });
 
+test("Phase 4A workbench scopes one editor and supports enrichment filters", async () => {
+  const [directory, client, api] = await Promise.all([
+    read("db/directory.ts"),
+    read("app/admin/directory/DirectoryReviewClient.tsx"),
+    read("app/api/admin/directory/route.ts"),
+  ]);
+
+  assert.match(client, /candidate-queue/);
+  assert.match(client, /candidate-editor/);
+  assert.match(client, /Public readiness/);
+  assert.match(client, /Official-source search/);
+  assert.match(api, /shelterType/);
+  assert.match(api, /focus/);
+  assert.match(directory, /focus === "missing_phone"/);
+  assert.match(directory, /focus === "core_complete"/);
+  assert.match(directory, /shelterType === "transitional"/);
+});
+
 test("public coverage reports the federal foundation but public results stay published-only", async () => {
   const [page, directory] = await Promise.all([
     read("app/page.tsx"),
