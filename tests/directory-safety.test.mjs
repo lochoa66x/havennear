@@ -171,3 +171,35 @@ test("Phase 4B public results prioritize urgent actions and preserve device-only
   assert.match(page, /fetch\("\/api\/shelters\?limit=200", \{ signal/);
   assert.match(page, /Distance is calculated on this device/);
 });
+
+test("Phase 4C community corrections stay private and human-reviewed", async () => {
+  const [page, publicApi, adminApi, corrections, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/api/corrections/route.ts"),
+    read("app/api/admin/corrections/route.ts"),
+    read("db/corrections.ts"),
+    read("drizzle/0004_community_corrections.sql"),
+  ]);
+
+  assert.match(page, /\/correct\?shelterId=/);
+  assert.match(publicApi, /privacyAccepted/);
+  assert.doesNotMatch(publicApi, /contactName|officialEmail|guest_name|date_of_birth/i);
+  assert.match(adminApi, /requireOperatorApi/);
+  assert.match(corrections, /INSERT INTO shelter_correction_requests/);
+  assert.match(corrections, /UPDATE shelter_correction_requests/);
+  assert.doesNotMatch(corrections, /UPDATE shelters/);
+  assert.match(migration, /shelter_correction_requests/);
+});
+
+test("Phase 4C shelter claims preselect and prefill the published listing", async () => {
+  const [page, join] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/join/page.tsx"),
+  ]);
+
+  assert.match(page, /\/join\?shelterId=/);
+  assert.match(join, /requestedId/);
+  assert.match(join, /setSelectedShelterId/);
+  assert.match(join, /setOrganizationName/);
+  assert.match(join, /claim-selection/);
+});

@@ -157,3 +157,16 @@ export const shelterAvailabilityUpdates = sqliteTable("shelter_availability_upda
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
 });
+
+export const shelterCorrectionRequests = sqliteTable("shelter_correction_requests", {
+  id: text("id").primaryKey(),
+  shelterId: text("shelter_id").notNull(),
+  correctionType: text("correction_type").notNull(),
+  details: text("details").notNull(),
+  sourceUrl: text("source_url"),
+  status: text("status").notNull().default("pending_review"),
+  reviewerNote: text("reviewer_note").notNull().default(""),
+  reviewedBy: text("reviewed_by"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
+});

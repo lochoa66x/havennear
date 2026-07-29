@@ -376,7 +376,10 @@ export default function Home() {
                 <a className="source-link" href={shelter.sourceUrl} target="_blank" rel="noreferrer">
                   Details from {shelter.sourceLabel} · checked {shelter.sourceCheckedAt}
                 </a>
-                <a className="claim-link" href="/join">Shelter staff: claim or update this listing</a>
+                <div className="listing-community-links">
+                  <a className="correction-link" href={`/correct?shelterId=${encodeURIComponent(shelter.id)}`}>Suggest a correction</a>
+                  <a className="claim-link" href={`/join?shelterId=${encodeURIComponent(shelter.id)}`}>Shelter staff: claim or update this listing</a>
+                </div>
               </div>
             </article>
           )) : directoryLoading ? (

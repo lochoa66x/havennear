@@ -16,13 +16,37 @@ export default function JoinHavenNearPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState("");
+  const [selectedShelterId, setSelectedShelterId] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [city, setCity] = useState("");
+  const [provinceCode, setProvinceCode] = useState("");
 
   useEffect(() => {
+    const requestedId = new URLSearchParams(window.location.search).get("shelterId") || "";
     fetch("/api/shelters?limit=200")
       .then((response) => response.json())
-      .then((result: PublicShelterResponse) => setShelters(result.shelters || []))
+      .then((result: PublicShelterResponse) => {
+        const listings = result.shelters || [];
+        setShelters(listings);
+        const requestedShelter = listings.find((shelter) => shelter.id === requestedId);
+        if (requestedShelter) {
+          setSelectedShelterId(requestedShelter.id);
+          setOrganizationName(requestedShelter.name);
+          setCity(requestedShelter.city);
+          setProvinceCode(requestedShelter.provinceCode);
+        }
+      })
       .catch(() => setShelters([]));
   }, []);
+
+  function chooseShelter(id: string) {
+    setSelectedShelterId(id);
+    const shelter = shelters.find((item) => item.id === id);
+    if (!shelter) return;
+    setOrganizationName(shelter.name);
+    setCity(shelter.city);
+    setProvinceCode(shelter.provinceCode);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -120,25 +144,32 @@ export default function JoinHavenNearPage() {
         <form className="join-form" onSubmit={submit}>
           <label>
             Existing directory listing <span>Optional</span>
-            <select name="shelterId" defaultValue="">
+            <select name="shelterId" value={selectedShelterId} onChange={(event) => chooseShelter(event.target.value)}>
               <option value="">My shelter is not listed or I am not sure</option>
               {shelters.map((shelter) => <option key={shelter.id} value={shelter.id}>{shelter.name}</option>)}
             </select>
           </label>
 
+          {selectedShelterId && (
+            <div className="claim-selection">
+              <strong>Listing selected</strong>
+              <span>We filled the public organization and location fields. You can correct them before sending the request.</span>
+            </div>
+          )}
+
           <label>
             Organization or shelter name
-            <input name="organizationName" required maxLength={160} autoComplete="organization" />
+            <input name="organizationName" required maxLength={160} autoComplete="organization" value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} />
           </label>
 
           <div className="form-row">
             <label>
               City
-              <input name="city" required maxLength={100} autoComplete="address-level2" />
+              <input name="city" required maxLength={100} autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} />
             </label>
             <label>
               Province or territory
-              <select name="provinceCode" required defaultValue="">
+              <select name="provinceCode" required value={provinceCode} onChange={(event) => setProvinceCode(event.target.value)}>
                 <option value="" disabled>Select one</option>
                 {provinces.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
               </select>

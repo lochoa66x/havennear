@@ -63,6 +63,7 @@ export default function ParticipantReviewClient({ displayName }: { displayName: 
         </Link>
         <div className="admin-header-actions">
           <span className="preview-badge">Operator only</span>
+          <Link className="admin-back" href="/admin/corrections">Correction requests</Link>
           <Link className="admin-back" href="/admin/directory">Directory review</Link>
         </div>
       </header>
