@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { shelterFilters, type PublicShelter, type PublicShelterResponse } from "./directory-types";
 
 type UserLocation = { latitude: number; longitude: number };
@@ -20,6 +20,18 @@ function distanceInKilometres(from: UserLocation, to: { latitude: number; longit
 
 function formatDistance(distance: number) {
   return distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`;
+}
+
+function displayFreshTime(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 const matchesFilter = (groups: string[], services: string[], filter: string) => {
@@ -47,6 +59,7 @@ export default function Home() {
   const [notice, setNotice] = useState("Showing the Montréal pilot directory");
   const [locating, setLocating] = useState(false);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const resultsRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -106,12 +119,17 @@ export default function Home() {
     );
   }
 
+  function showResults() {
+    requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
   function useLocation() {
     setLocating(true);
     if (!navigator.geolocation) {
       setQuery("Montréal");
       setNotice("Location is unavailable. Showing the Montréal pilot directory.");
       setLocating(false);
+      showResults();
       return;
     }
 
@@ -124,12 +142,14 @@ export default function Home() {
         setQuery("");
         setNotice("Sorted by straight-line distance from this device");
         setLocating(false);
+        showResults();
       },
       () => {
         setUserLocation(null);
         setQuery("Montréal");
         setNotice("Location was not shared. Showing the Montréal pilot directory.");
         setLocating(false);
+        showResults();
       },
       { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 },
     );
@@ -138,6 +158,7 @@ export default function Home() {
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNotice(query.trim() ? `Showing results for “${query.trim()}”` : "Showing the Montréal pilot directory");
+    showResults();
   }
 
   return (
@@ -203,7 +224,7 @@ export default function Home() {
                   if (filter && shelterFilters.includes(filter) && !activeFilters.includes(filter)) {
                     setActiveFilters((current) => [...current, filter]);
                   }
-                  document.getElementById("results")?.scrollIntoView();
+                  showResults();
                 }}
               >
                 <span aria-hidden="true">●</span>{label}
@@ -226,23 +247,22 @@ export default function Home() {
         </aside>
       </section>
 
-      <section className="results-section" id="results" aria-live="polite">
+      <section className="results-section" id="results" aria-live="polite" ref={resultsRef} tabIndex={-1}>
         <div className="results-heading">
           <div>
             <p className="section-label">{notice}</p>
             <h2>{visibleShelters.length} places that may be able to help</h2>
           </div>
-          <p className="updated"><span /> Space can change quickly — call first</p>
+          <div className="results-heading-actions">
+            <p className="updated"><span /> Space can change quickly — call first</p>
+            <a className="refine-search" href="#top">Change search</a>
+          </div>
         </div>
 
-        <div className="capacity-boundary">
-          <strong>Distance and participation are separate.</strong>
-          Every suitable shelter can be suggested and ranked by proximity. Participation only adds trusted, time-limited availability updates; it never buys or improves placement.
-        </div>
-
-        <div className="network-explainer" aria-label="Directory status explanation">
-          <div><span className="network-dot directory" /><strong>Directory listing</strong><p>Official contact details; call to confirm capacity.</p></div>
-          <div><span className="network-dot live" /><strong>Participating shelter</strong><p>Verified staff can publish expiring availability.</p></div>
+        <div className="urgent-guidance">
+          <strong>Call before travelling.</strong>
+          <span>A shelter confirms space and handles registration privately.</span>
+          <a href="tel:211">No suitable result? Call 211</a>
         </div>
 
         <div className="filters" aria-label="Filter shelters">
@@ -258,6 +278,26 @@ export default function Home() {
             </button>
           ))}
         </div>
+
+        {activeFilters.length > 0 && (
+          <div className="active-filter-summary" role="status">
+            <span>Showing shelters matching: {activeFilters.join(", ")}</span>
+            <button type="button" onClick={() => setActiveFilters([])}>Clear filters</button>
+          </div>
+        )}
+
+        <details className="directory-explanation">
+          <summary>How directory and live availability information work</summary>
+          <div className="capacity-boundary">
+            <strong>Distance and participation are separate.</strong>
+            Every suitable shelter can be suggested and ranked by proximity. Participation only adds trusted,
+            time-limited availability updates; it never buys or improves placement.
+          </div>
+          <div className="network-explainer" aria-label="Directory status explanation">
+            <div><span className="network-dot directory" /><strong>Directory listing</strong><p>Verified contact details; call to confirm capacity.</p></div>
+            <div><span className="network-dot live" /><strong>Participating shelter</strong><p>Verified staff can publish expiring availability.</p></div>
+          </div>
+        </details>
 
         <div className="shelter-list">
           {visibleShelters.length ? visibleShelters.map((shelter, index) => (
@@ -275,22 +315,42 @@ export default function Home() {
                   <p className="calculated-distance">{formatDistance(shelter.distanceKm)} <span>· straight-line</span></p>
                 )}
                 <p className="distance">{shelter.address}</p>
-                <p className="hours">{shelter.hours}</p>
-                <div className="tags">
-                  {shelter.groups.map((group) => <span key={group}>{group}</span>)}
-                  {shelter.services.map((service) => <span key={service}>{service}</span>)}
+                <div className="card-information">
+                  <div>
+                    <span className="information-label">Who this shelter serves</span>
+                    <div className="tags priority-tags">
+                      {shelter.groups.map((group) => <span key={group}>{group}</span>)}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="information-label">Hours</span>
+                    <p className="hours">{shelter.hours}</p>
+                  </div>
                 </div>
               </div>
               <div className="shelter-action">
-                <p className="confirmed">
-                  {shelter.status === "call"
-                    ? "Capacity not connected"
-                    : shelter.spacesAvailable !== undefined
-                      ? `${shelter.spacesAvailable} spaces reported`
-                      : "Fresh shelter update"}
-                </p>
-                <p className="intake">{shelter.intake}</p>
-                <p className="phone-line">{shelter.phoneDisplay}</p>
+                <div className="freshness-block">
+                  <strong>
+                    {shelter.status === "call"
+                      ? "Call to confirm space"
+                      : shelter.spacesAvailable !== undefined
+                        ? `${shelter.spacesAvailable} spaces reported`
+                        : "Fresh shelter update"}
+                  </strong>
+                  {shelter.status === "call" ? (
+                    <span>Directory information checked {shelter.sourceCheckedAt}</span>
+                  ) : (
+                    <span>
+                      Availability updated {displayFreshTime(shelter.availabilityUpdatedAt) || "time not reported"}
+                      {shelter.availabilityExpiresAt && ` · expires ${displayFreshTime(shelter.availabilityExpiresAt)}`}
+                    </span>
+                  )}
+                </div>
+                <div className="intake-block">
+                  <span className="information-label">How to get in</span>
+                  <p className="intake">{shelter.intake}</p>
+                </div>
+                <p className="phone-line"><span>Telephone</span>{shelter.phoneDisplay}</p>
                 <div className="card-buttons">
                   <a href={`tel:${shelter.phone}`}>Call shelter</a>
                   {!shelter.confidentialAddress && (
@@ -304,6 +364,14 @@ export default function Home() {
                     </a>
                   )}
                 </div>
+                {shelter.services.length > 0 && (
+                  <div className="service-summary">
+                    <span className="information-label">Services</span>
+                    <div className="tags">
+                      {shelter.services.map((service) => <span key={service}>{service}</span>)}
+                    </div>
+                  </div>
+                )}
                 <p className="card-note">{shelter.note}</p>
                 <a className="source-link" href={shelter.sourceUrl} target="_blank" rel="noreferrer">
                   Details from {shelter.sourceLabel} · checked {shelter.sourceCheckedAt}

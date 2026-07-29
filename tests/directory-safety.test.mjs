@@ -158,3 +158,16 @@ test("public coverage reports the federal foundation but public results stay pub
   assert.match(directory, /federalCandidates/);
   assert.match(directory, /s\.publication_state = 'published'/);
 });
+
+test("Phase 4B public results prioritize urgent actions and preserve device-only location", async () => {
+  const page = await read("app/page.tsx");
+
+  assert.match(page, /resultsRef/);
+  assert.match(page, /Who this shelter serves/);
+  assert.match(page, /How to get in/);
+  assert.match(page, /Availability updated/);
+  assert.match(page, /directory-explanation/);
+  assert.match(page, /href="tel:211"/);
+  assert.match(page, /fetch\("\/api\/shelters\?limit=200", \{ signal/);
+  assert.match(page, /Distance is calculated on this device/);
+});
