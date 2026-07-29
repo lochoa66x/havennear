@@ -34,14 +34,20 @@ jobs:
           node-version: "22.13.0"
           package-manager-cache: false
 
+      - name: Enable the locked pnpm version
+        run: corepack enable
+
       - name: Install locked dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+
+      - name: Reject critical dependency vulnerabilities
+        run: pnpm audit --audit-level critical
 
       - name: Run lint checks
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Create the production build
-        run: npm run build
+        run: pnpm run build
 
       - name: Run directory privacy and safety tests
         run: node --test tests/directory-safety.test.mjs

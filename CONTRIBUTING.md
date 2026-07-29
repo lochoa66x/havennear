@@ -53,8 +53,8 @@ authoritative source and must still go through review before publication.
 4. Run:
 
    ```bash
-   npm run lint
-   npm test
+   pnpm run lint
+   pnpm test
    ```
 
 5. Open a pull request using the repository template.

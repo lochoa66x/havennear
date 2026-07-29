@@ -24,8 +24,8 @@ List authoritative sources, reuse terms, and verification dates, or write
 
 ## Validation
 
-- [ ] `npm run lint`
-- [ ] `npm test`
+- [ ] `pnpm run lint`
+- [ ] `pnpm test`
 - [ ] Mobile and keyboard behaviour checked when the interface changed
 
 ## Rollback
