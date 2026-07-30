@@ -160,7 +160,7 @@ export default function ResearchCandidatesClient({ displayName }: { displayName:
           </div>
           <div className="research-guard">
             <strong>Publication lock is on</strong>
-            <span>Research candidates cannot enter the public directory from this workspace.</span>
+            <span>Research candidates cannot enter the public directory from this workspace. Sensitive, protected, women-only, confidential, refugee-specific, and temporary shelters are excluded before review.</span>
           </div>
         </div>
 

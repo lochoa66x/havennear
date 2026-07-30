@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { PublicShelter, ShelterStatus } from "../app/directory-types";
 import { montrealSeedShelters } from "./seed-shelters";
+import { assessShelterScope, assertShelterInScope } from "./shelter-scope-policy";
 
 type DirectoryRow = Record<string, unknown>;
 
@@ -33,6 +34,7 @@ const schemaStatements = [
     total_beds INTEGER,
     participation_state TEXT NOT NULL DEFAULT 'directory',
     publication_state TEXT NOT NULL DEFAULT 'draft',
+    scope_state TEXT NOT NULL DEFAULT 'unreviewed',
     availability_status TEXT NOT NULL DEFAULT 'call',
     spaces_available INTEGER,
     availability_updated_at INTEGER,
@@ -133,13 +135,14 @@ export async function ensureMontrealSeed() {
   const statements = [];
 
   for (const shelter of montrealSeedShelters) {
+    if (!assessShelterScope(shelter).eligible) continue;
     statements.push(env.DB.prepare(`
       INSERT OR IGNORE INTO shelters (
         id, slug, name, shelter_type, address, city, province_code, country_code,
         latitude, longitude, confidential_address, phone, phone_display, website,
         hours, intake, groups_json, services_json, accessibility_json, languages_json,
-        participation_state, publication_state, availability_status, note, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)
+        participation_state, publication_state, scope_state, availability_status, note, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', 'eligible_general', ?, ?, ?, ?)
     `).bind(
       shelter.id, shelter.id, shelter.name, shelter.shelterType, shelter.address,
       shelter.city, shelter.provinceCode, shelter.countryCode,
@@ -226,7 +229,7 @@ export async function listPublishedShelters(options: {
 
   const page = Math.max(1, options.page ?? 1);
   const limit = Math.min(200, Math.max(1, options.limit ?? 50));
-  const clauses = ["s.publication_state = 'published'"];
+  const clauses = ["s.publication_state = 'published'", "s.scope_state = 'eligible_general'"];
   const bindings: unknown[] = [];
   if (options.province) {
     clauses.push("s.province_code = ?");
@@ -365,6 +368,10 @@ export async function importShelterCsv(input: {
       groups: splitList(firstValue(row, ["groups", "populations", "who_can_stay"])),
       services: splitList(firstValue(row, ["services"])),
       confidentialAddress: ["true", "yes", "1"].includes(firstValue(row, ["confidential_address"]).toLowerCase()),
+      genderServed: firstValue(row, ["gender_served", "gender"]),
+      targetClientele: firstValue(row, ["target_clientele", "clientele"]),
+      umbrellaOrganization: firstValue(row, ["umbrella_organization", "organization"]),
+      scopeConfirmed: false,
     };
     const warnings = [];
     if (!parsed.name) warnings.push("Missing shelter name");
@@ -374,17 +381,20 @@ export async function importShelterCsv(input: {
     if (!parsed.confidentialAddress && !parsed.address) warnings.push("Missing public address");
     if (!parsed.hours) warnings.push("Missing hours");
     if (!parsed.intake) warnings.push("Missing intake guidance");
+    const scope = assessShelterScope(parsed);
+    if (!scope.eligible) warnings.push(...scope.reasons.map((reason) => `Excluded by safety scope: ${reason}`));
     const duplicates = await duplicateCandidates(parsed);
     if (duplicates.length) duplicateCount += 1;
-    if (!warnings.length) validRows += 1;
+    const reviewState = scope.eligible ? "pending" : "excluded_sensitive";
+    if (!warnings.length && scope.eligible) validRows += 1;
     statements.push(env.DB.prepare(`
       INSERT INTO directory_staging_records (
         id, batch_id, source_row_json, parsed_json, validation_warnings_json,
         duplicate_candidates_json, review_state, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       `stage_${crypto.randomUUID()}`, batchId, JSON.stringify(row), JSON.stringify(parsed),
-      JSON.stringify(warnings), JSON.stringify(duplicates), now,
+      JSON.stringify(warnings), JSON.stringify(duplicates), reviewState, now,
     ));
   }
 
@@ -422,12 +432,22 @@ export async function updateStagingRecord(id: string, parsed: Record<string, unk
     "name", "shelterType", "address", "city", "provinceCode", "postalCode",
     "phone", "phoneDisplay", "website", "hours", "intake", "groups", "services",
     "confidentialAddress", "totalBeds", "federalServiceProviderId",
-    "umbrellaOrganization", "targetClientele", "genderServed", "sourceYear",
+    "umbrellaOrganization", "targetClientele", "genderServed", "sourceYear", "scopeConfirmed",
   ];
   const clean = Object.fromEntries(allowed.filter((key) => key in parsed).map((key) => [key, parsed[key]]));
+  const scope = assessShelterScope(clean);
+  const reviewState = scope.eligible ? "pending" : "excluded_sensitive";
   await env.DB.prepare(`
-    UPDATE directory_staging_records SET parsed_json = ?, reviewer_notes = ? WHERE id = ? AND review_state = 'pending'
-  `).bind(JSON.stringify(clean), notes.slice(0, 1000), id).run();
+    UPDATE directory_staging_records
+    SET parsed_json = ?, reviewer_notes = ?, review_state = ?, reviewed_at = ?
+    WHERE id = ? AND review_state = 'pending'
+  `).bind(
+    JSON.stringify(clean),
+    notes.slice(0, 1000),
+    reviewState,
+    reviewState === "pending" ? null : Date.now(),
+    id,
+  ).run();
   await audit(actorEmail, "staging_corrected", { stagingRecordId: id, fields: Object.keys(clean) });
 }
 
@@ -487,6 +507,7 @@ function shelterBindings(id: string, parsed: Record<string, unknown>, now: numbe
 
 export async function approveStagingRecord(id: string, actorEmail: string) {
   const stage = await getStage(id);
+  assertShelterInScope(stage.parsed, { requireConfirmation: true });
   const shelterId = `shelter_${crypto.randomUUID()}`;
   const now = Date.now();
   const sourceStatements = await sourceForStage(stage, shelterId);
@@ -495,8 +516,8 @@ export async function approveStagingRecord(id: string, actorEmail: string) {
       INSERT INTO shelters (
         id, slug, name, shelter_type, address, city, province_code, postal_code,
         confidential_address, phone, phone_display, website, hours, intake,
-        groups_json, services_json, total_beds, publication_state, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?)
+        groups_json, services_json, total_beds, publication_state, scope_state, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 'eligible_general', ?, ?)
     `).bind(...shelterBindings(shelterId, stage.parsed, now)),
     env.DB.prepare(`
       UPDATE directory_staging_records
@@ -510,6 +531,7 @@ export async function approveStagingRecord(id: string, actorEmail: string) {
 
 export async function mergeStagingRecord(id: string, shelterId: string, actorEmail: string) {
   const stage = await getStage(id);
+  assertShelterInScope(stage.parsed, { requireConfirmation: true });
   const now = Date.now();
   const values = shelterBindings(shelterId, stage.parsed, now);
   const sourceStatements = await sourceForStage(stage, shelterId);
@@ -518,7 +540,7 @@ export async function mergeStagingRecord(id: string, shelterId: string, actorEma
       UPDATE shelters SET
         name = ?, shelter_type = ?, address = ?, city = ?, province_code = ?, postal_code = ?,
         confidential_address = ?, phone = ?, phone_display = ?, website = ?, hours = ?, intake = ?,
-        groups_json = ?, services_json = ?, total_beds = ?, updated_at = ?
+        groups_json = ?, services_json = ?, total_beds = ?, scope_state = 'eligible_general', updated_at = ?
       WHERE id = ?
     `).bind(...values.slice(2, 17), now, shelterId),
     env.DB.prepare(`
@@ -539,8 +561,23 @@ export async function rejectStagingRecord(id: string, reason: string, actorEmail
 }
 
 export async function publishShelter(id: string, actorEmail: string) {
+  const shelter = await env.DB.prepare(`SELECT * FROM shelters WHERE id = ?`).bind(id).first<DirectoryRow>();
+  if (!shelter || shelter.publication_state !== "approved") throw new Error("This shelter is not ready to publish.");
+  assertShelterInScope({
+    name: shelter.name,
+    shelterType: shelter.shelter_type,
+    address: shelter.address,
+    phone: shelter.phone,
+    website: shelter.website,
+    intake: shelter.intake,
+    groups: jsonArray(shelter.groups_json),
+    services: jsonArray(shelter.services_json),
+    confidentialAddress: shelter.confidential_address === 1,
+    scopeConfirmed: shelter.scope_state === "eligible_general",
+  }, { requireConfirmation: true });
   await env.DB.prepare(`
-    UPDATE shelters SET publication_state = 'published', updated_at = ? WHERE id = ? AND publication_state = 'approved'
+    UPDATE shelters SET publication_state = 'published', updated_at = ?
+    WHERE id = ? AND publication_state = 'approved' AND scope_state = 'eligible_general'
   `).bind(Date.now(), id).run();
   await audit(actorEmail, "published", { shelterId: id, fields: ["publication_state"] });
 }

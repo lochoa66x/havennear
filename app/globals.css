@@ -815,3 +815,29 @@ footer { padding: 38px clamp(24px, 7vw, 110px); display: grid; grid-template-col
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
+.scope-policy-card,
+.scope-exclusion {
+  border: 1px solid #c9822b;
+  border-radius: 14px;
+  background: #fff8ec;
+  color: #5d3a10;
+  padding: 14px 16px;
+}
+
+.scope-policy-card {
+  display: grid;
+  gap: 5px;
+}
+
+.scope-confirmation {
+  align-items: flex-start !important;
+  display: flex !important;
+  gap: 10px;
+  line-height: 1.45;
+}
+
+.scope-confirmation input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  width: auto !important;
+}

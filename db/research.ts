@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
 import { ensureDirectorySchema } from "./directory";
+import { assertShelterInScope } from "./shelter-scope-policy";
 import { torontoResearchPilot, type TorontoResearchSeed } from "./toronto-research-seed";
 
 type Row = Record<string, unknown>;
 
-const TORONTO_BATCH_ID = "research_toronto_20260729_pilot25";
+const TORONTO_BATCH_ID = "research_toronto_20260729_general25_v2";
 const TORONTO_DATASET_URL = "https://open.toronto.ca/dataset/daily-shelter-overnight-service-occupancy-capacity/";
 const TORONTO_RESOURCE_URL = "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/21c83b32-d5a8-4106-a54f-010dbe49f6f2/resource/ffd20867-6e3c-4074-8427-d63810edf231/download/daily-shelter-overnight-occupancy.csv";
 const TORONTO_LICENCE = "Open Government Licence – Toronto";
@@ -184,6 +185,7 @@ function proposedChanges(source: TorontoResearchSeed) {
     shelterType: source.models.join(" / "),
     groups: source.sectors,
     services: source.types,
+    scopeConfirmed: false,
   };
 }
 
@@ -213,6 +215,20 @@ export async function ensureTorontoResearchPilot() {
     .bind(TORONTO_BATCH_ID)
     .first<{ id: string }>();
   if (existing) return;
+  for (const source of torontoResearchPilot) {
+    assertShelterInScope({
+      name: source.name,
+      shelterType: [...source.models, ...source.types].join(" "),
+      address: source.address,
+      groups: source.sectors,
+      umbrellaOrganization: source.org,
+      sourceText: source.group,
+      programs: source.programs,
+    });
+  }
+  if (torontoResearchPilot.length !== 25) {
+    throw new Error("The screened Toronto pilot must contain exactly 25 locations.");
+  }
 
   const [stagingResult, shelterResult] = await Promise.all([
     env.DB.prepare(`
@@ -231,7 +247,7 @@ export async function ensureTorontoResearchPilot() {
   const matchCounts = { exact: 0, probable: 0, ambiguous: 0, unmatched: 0 };
 
   for (const source of torontoResearchPilot) {
-    const candidateId = `research_toronto_${SNAPSHOT_DATE.replaceAll("-", "")}_${source.id}`;
+    const candidateId = `research_toronto_${SNAPSHOT_DATE.replaceAll("-", "")}_v2_${source.id}`;
     const match = bestMatch(source, stagingResult.results, shelterResult.results);
     matchCounts[match.state as keyof typeof matchCounts] += 1;
     candidateStatements.push(env.DB.prepare(`

@@ -43,6 +43,7 @@ export const shelters = sqliteTable("shelters", {
   totalBeds: integer("total_beds"),
   participationState: text("participation_state").notNull().default("directory"),
   publicationState: text("publication_state").notNull().default("draft"),
+  scopeState: text("scope_state").notNull().default("unreviewed"),
   availabilityStatus: text("availability_status").notNull().default("call"),
   spacesAvailable: integer("spaces_available"),
   availabilityUpdatedAt: integer("availability_updated_at", { mode: "timestamp_ms" }),

@@ -244,3 +244,58 @@ test("Phase 5A attaches provenance to every proposal and measures verified accur
   assert.match(migration, /research_candidates/);
   assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
 });
+
+test("sensitive-shelter policy is a hard guard from import through publication", async () => {
+  const [policy, directory, client] = await Promise.all([
+    read("db/shelter-scope-policy.ts"),
+    read("db/directory.ts"),
+    read("app/admin/directory/DirectoryReviewClient.tsx"),
+  ]);
+
+  assert.match(policy, /Confidential or protected location/);
+  assert.match(policy, /Women-only service/);
+  assert.match(policy, /violence against women/);
+  assert.match(policy, /refugee/);
+  assert.match(policy, /motel\\\/hotel shelter/);
+  assert.match(directory, /reviewState = scope\.eligible \? "pending" : "excluded_sensitive"/);
+  assert.match(directory, /assertShelterInScope\(stage\.parsed, \{ requireConfirmation: true \}\)/);
+  assert.match(directory, /scope_state = 'eligible_general'/);
+  assert.match(client, /Hard safety boundary/);
+  assert.match(client, /General-shelter scope confirmed/);
+});
+
+test("public directory requires an eligible general-shelter scope state", async () => {
+  const directory = await read("db/directory.ts");
+  const publicQuery = directory.slice(
+    directory.indexOf("export async function listPublishedShelters"),
+    directory.indexOf("function parseCsv"),
+  );
+
+  assert.match(publicQuery, /s\.scope_state = 'eligible_general'/);
+  assert.match(directory, /AND scope_state = 'eligible_general'/);
+});
+
+test("migration archives known sensitive Montreal listings and replaces the unscreened Toronto pilot", async () => {
+  const migration = await read("drizzle/0006_unusual_terror.sql");
+
+  for (const id of ["old-brewery-mackenzie", "chez-doris", "dans-la-rue-bunker", "auberge-shalom"]) {
+    assert.match(migration, new RegExp(id));
+  }
+  assert.match(migration, /scope_state` = 'excluded_sensitive'/);
+  assert.match(migration, /research_toronto_20260729_pilot25/);
+  assert.match(migration, /DELETE FROM `research_candidates`/);
+});
+
+test("screened Toronto research seed contains only 25 public established locations", async () => {
+  const [seed, research] = await Promise.all([
+    read("db/toronto-research-seed.ts"),
+    read("db/research.ts"),
+  ]);
+  const records = seed.match(/\{ id: "\d+"/g) || [];
+  const recordsOnly = seed.slice(seed.indexOf("export const torontoResearchPilot"));
+
+  assert.equal(records.length, 25);
+  assert.doesNotMatch(recordsOnly, /refugee|women's|women-only|motel\/hotel|hotel program|confidential|violence|victim|survivor/i);
+  assert.match(research, /assertShelterInScope/);
+  assert.match(research, /general25_v2/);
+});
