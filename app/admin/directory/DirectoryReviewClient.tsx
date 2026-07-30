@@ -227,6 +227,7 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
         </Link>
         <div className="admin-header-actions">
           <span className="preview-badge">Private pilot</span>
+          <Link className="admin-back" href="/admin/research">Research candidates</Link>
           <Link className="admin-back" href="/admin/corrections">Correction requests</Link>
           <Link className="admin-back" href="/admin/participants">Participation requests</Link>
           <Link className="admin-back" href="/admin">Shelter workspace</Link>

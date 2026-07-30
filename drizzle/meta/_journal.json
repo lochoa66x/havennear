@@ -36,6 +36,13 @@
       "when": 1785290400000,
       "tag": "0004_community_corrections",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785420209823,
+      "tag": "0005_useful_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

@@ -120,6 +120,63 @@ export const directoryReviewActivity = sqliteTable("directory_review_activity", 
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+export const researchBatches = sqliteTable("research_batches", {
+  id: text("id").primaryKey(),
+  datasetName: text("dataset_name").notNull(),
+  publisher: text("publisher").notNull(),
+  datasetVersion: text("dataset_version").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  licence: text("licence").notNull(),
+  licenceUrl: text("licence_url").notNull(),
+  retrievedAt: integer("retrieved_at", { mode: "timestamp_ms" }).notNull(),
+  checksum: text("checksum").notNull(),
+  runLimit: integer("run_limit").notNull(),
+  scaleTarget: integer("scale_target").notNull().default(100),
+  totalRows: integer("total_rows").notNull().default(0),
+  exactMatches: integer("exact_matches").notNull().default(0),
+  probableMatches: integer("probable_matches").notNull().default(0),
+  ambiguousMatches: integer("ambiguous_matches").notNull().default(0),
+  unmatchedRows: integer("unmatched_rows").notNull().default(0),
+  status: text("status").notNull().default("pilot"),
+  publicationGuard: text("publication_guard").notNull().default("private_review_only"),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const researchCandidates = sqliteTable("research_candidates", {
+  id: text("id").primaryKey(),
+  batchId: text("batch_id").notNull(),
+  sourceRecordId: text("source_record_id").notNull(),
+  sourceRowJson: text("source_row_json").notNull(),
+  proposedChangesJson: text("proposed_changes_json").notNull(),
+  matchedStagingRecordId: text("matched_staging_record_id"),
+  matchedShelterId: text("matched_shelter_id"),
+  matchState: text("match_state").notNull().default("unmatched"),
+  matchScore: real("match_score").notNull().default(0),
+  matchExplanation: text("match_explanation").notNull().default(""),
+  privacyFlagsJson: text("privacy_flags_json").notNull().default("[]"),
+  reviewState: text("review_state").notNull().default("pending"),
+  reviewOutcome: text("review_outcome"),
+  reviewerNotes: text("reviewer_notes").notNull().default(""),
+  privacyCleared: integer("privacy_cleared", { mode: "boolean" }).notNull().default(false),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const researchCandidateCitations = sqliteTable("research_candidate_citations", {
+  id: text("id").primaryKey(),
+  candidateId: text("candidate_id").notNull(),
+  publisher: text("publisher").notNull(),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  licence: text("licence").notNull(),
+  licenceUrl: text("licence_url").notNull(),
+  retrievedAt: integer("retrieved_at", { mode: "timestamp_ms" }).notNull(),
+  sourceVersion: text("source_version").notNull(),
+  fieldsSupportedJson: text("fields_supported_json").notNull().default("[]"),
+});
+
 export const platformOperators = sqliteTable("platform_operators", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),

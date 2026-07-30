@@ -203,3 +203,44 @@ test("Phase 4C shelter claims preselect and prefill the published listing", asyn
   assert.match(join, /setOrganizationName/);
   assert.match(join, /claim-selection/);
 });
+
+test("Phase 5A research candidates are private, operator-only, and never auto-published", async () => {
+  const [page, api, research] = await Promise.all([
+    read("app/admin/research/page.tsx"),
+    read("app/api/admin/research/route.ts"),
+    read("db/research.ts"),
+  ]);
+
+  assert.match(page, /requireOperatorPage\("\/admin\/research"\)/);
+  assert.match(api, /requireOperatorApi/);
+  assert.match(research, /publication_guard.*private_review_only/s);
+  assert.match(research, /review_state = 'reviewed'/);
+  assert.doesNotMatch(research, /UPDATE shelters SET|INSERT INTO shelters/);
+});
+
+test("Phase 5A Toronto pilot contains exactly 25 dated structured records without live capacity", async () => {
+  const seed = await read("db/toronto-research-seed.ts");
+  const records = seed.match(/\{ id: "\d+"/g) || [];
+
+  assert.equal(records.length, 25);
+  assert.match(seed, /official City of Toronto feed/);
+  assert.doesNotMatch(seed, /spacesAvailable|occupiedBeds|capacityActual|availabilityStatus/);
+});
+
+test("Phase 5A attaches provenance to every proposal and measures verified accuracy before scaling", async () => {
+  const [research, client, migration] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+    read("drizzle/0005_useful_bruce_banner.sql"),
+  ]);
+
+  assert.match(research, /research_candidate_citations/);
+  assert.match(research, /Open Government Licence – Toronto/);
+  assert.match(research, /verifiedAccuracy/);
+  assert.match(research, /minimumReviewed: 20/);
+  assert.match(research, /minimumAccuracy: 0\.9/);
+  assert.match(client, /100-record daily run remains locked/);
+  assert.match(client, /Publication lock is on/);
+  assert.match(migration, /research_candidates/);
+  assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
+});
