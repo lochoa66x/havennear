@@ -299,3 +299,71 @@ test("screened Toronto research seed contains only 25 public established locatio
   assert.match(research, /assertShelterInScope/);
   assert.match(research, /general25_v2/);
 });
+
+test("Phase 5B seeds official operator and government sources without publishing them", async () => {
+  const [seed, research] = await Promise.all([
+    read("db/toronto-verification-seed.ts"),
+    read("db/research.ts"),
+  ]);
+  const records = seed.match(/sourceRecordId: "\d+"/g) || [];
+
+  assert.equal(records.length, 22);
+  assert.match(seed, /checked on 2026-07-30/);
+  assert.match(seed, /City of Toronto|Covenant House Toronto|Dixon Hall/);
+  assert.match(research, /verification_\$\{candidateId\}/);
+  assert.match(research, /verification_state = 'unstarted'/);
+  assert.doesNotMatch(research, /UPDATE shelters SET|INSERT INTO shelters/);
+});
+
+test("Phase 5B verification requires official facts and all seven safety checks", async () => {
+  const [research, client, api] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+    read("app/api/admin/research/route.ts"),
+  ]);
+
+  for (const check of [
+    "officialSourceConfirmed", "addressConfirmed", "phoneConfirmed",
+    "hoursConfirmed", "intakeConfirmed", "scopeConfirmed", "duplicateChecked",
+  ]) {
+    assert.match(research, new RegExp(check));
+    assert.match(client, new RegExp(check));
+  }
+  assert.match(research, /Official sources must use HTTPS/);
+  assert.match(research, /assertShelterInScope/);
+  assert.match(research, /requiredDirectoryReady: 20/);
+  assert.match(client, /Nothing publishes automatically/);
+  assert.match(api, /saveResearchVerification/);
+  assert.match(api, /body\.action === "verification"/);
+});
+
+test("Phase 5B hard-excludes sensitive or specialized candidates", async () => {
+  const [seed, migration, research] = await Promise.all([
+    read("db/toronto-verification-seed.ts"),
+    read("drizzle/0007_bored_northstar.sql"),
+    read("db/research.ts"),
+  ]);
+
+  for (const id of ["1053", "1054", "1741", "1001"]) {
+    assert.match(migration, new RegExp(`'${id}'`));
+  }
+  assert.equal((seed.match(/exclusionReason:/g) || []).length, 4);
+  assert.match(migration, /excluded_sensitive/);
+  assert.match(research, /review_state != 'excluded_sensitive'/);
+  assert.match(research, /This candidate is excluded by the sensitive-shelter policy/);
+});
+
+test("Phase 5B schema records private verification state and directory readiness", async () => {
+  const [schema, migration] = await Promise.all([
+    read("db/schema.ts"),
+    read("drizzle/0007_bored_northstar.sql"),
+  ]);
+
+  assert.match(schema, /verificationJson/);
+  assert.match(schema, /verificationChecksJson/);
+  assert.match(schema, /verificationState/);
+  assert.match(schema, /directoryReady/);
+  assert.match(migration, /ADD `verification_json`/);
+  assert.match(migration, /ADD `directory_ready`/);
+  assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
+});

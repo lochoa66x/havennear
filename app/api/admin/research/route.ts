@@ -1,5 +1,9 @@
 import { requireOperatorApi } from "../../../operator-auth";
-import { getResearchDashboard, reviewResearchCandidate } from "../../../../db/research";
+import {
+  getResearchDashboard,
+  reviewResearchCandidate,
+  saveResearchVerification,
+} from "../../../../db/research";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +16,7 @@ export async function GET(request: Request) {
     ...(await getResearchDashboard({
       search: url.searchParams.get("search") || "",
       matchState: url.searchParams.get("matchState") || "",
+      verificationState: url.searchParams.get("verificationState") || "",
     })),
   });
 }
@@ -22,16 +27,27 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json() as Record<string, unknown>;
-    if (body.action !== "review") {
+    if (body.action === "review") {
+      await reviewResearchCandidate({
+        id: typeof body.id === "string" ? body.id : "",
+        outcome: typeof body.outcome === "string" ? body.outcome : "",
+        notes: typeof body.notes === "string" ? body.notes : "",
+        privacyCleared: body.privacyCleared === true,
+        actorEmail: user.email,
+      });
+    } else if (body.action === "verification") {
+      await saveResearchVerification({
+        id: typeof body.id === "string" ? body.id : "",
+        verification: body.verification && typeof body.verification === "object"
+          ? body.verification as Record<string, unknown> : {},
+        checks: body.checks && typeof body.checks === "object"
+          ? body.checks as Record<string, unknown> : {},
+        notes: typeof body.notes === "string" ? body.notes : "",
+        actorEmail: user.email,
+      });
+    } else {
       return Response.json({ error: "Unknown research action." }, { status: 400 });
     }
-    await reviewResearchCandidate({
-      id: typeof body.id === "string" ? body.id : "",
-      outcome: typeof body.outcome === "string" ? body.outcome : "",
-      notes: typeof body.notes === "string" ? body.notes : "",
-      privacyCleared: body.privacyCleared === true,
-      actorEmail: user.email,
-    });
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(
