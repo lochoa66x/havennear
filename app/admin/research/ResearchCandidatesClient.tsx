@@ -47,6 +47,7 @@ type Dashboard = {
     reviewed: number;
     verifiedCorrect: number;
     verifiedIncorrect: number;
+    reviewedConfidentMatches: number;
     verifiedAccuracy: number | null;
     privacyCleared: number;
     directoryReady: number;
@@ -54,6 +55,7 @@ type Dashboard = {
     excludedSensitive: number;
     scaleGate: {
       minimumReviewed: number;
+      minimumConfidentMatches: number;
       minimumAccuracy: number;
       requiredPrivacyClearances: number;
       requiredDirectoryReady: number;
@@ -75,6 +77,9 @@ const matchLabel: Record<string, string> = {
   unmatched: "No strong match",
 };
 const emptyVerification = {
+  verifiedAddress: "",
+  verifiedCity: "",
+  verifiedPostalCode: "",
   phone: "",
   phoneDisplay: "",
   website: "",
@@ -124,9 +129,16 @@ export default function ResearchCandidatesClient({ displayName }: { displayName:
     setNotes(candidate?.reviewerNotes || "");
     setOutcome(candidate?.reviewOutcome || "needs_research");
     setPrivacyCleared(candidate?.privacyCleared || false);
+    const existingVerification = candidate?.verification || {};
     setVerification({
       ...emptyVerification,
-      ...(candidate?.verification || {}),
+      ...existingVerification,
+      verifiedAddress: text(existingVerification.verifiedAddress)
+        || text(candidate?.proposedChanges.address),
+      verifiedCity: text(existingVerification.verifiedCity)
+        || text(candidate?.proposedChanges.city),
+      verifiedPostalCode: text(existingVerification.verifiedPostalCode)
+        || text(candidate?.proposedChanges.postalCode),
     } as Verification);
     setChecks({
       ...emptyChecks,
@@ -162,6 +174,12 @@ export default function ResearchCandidatesClient({ displayName }: { displayName:
     () => dashboard?.candidates.find((candidate) => candidate.id === selectedId),
     [dashboard, selectedId],
   );
+  const addressDiscrepancy = Boolean(selected && (
+    verification.verifiedAddress.trim().toLowerCase() !== text(selected.proposedChanges.address).trim().toLowerCase()
+    || verification.verifiedCity.trim().toLowerCase() !== text(selected.proposedChanges.city).trim().toLowerCase()
+    || verification.verifiedPostalCode.replace(/\s/g, "").toLowerCase()
+      !== text(selected.proposedChanges.postalCode).replace(/\s/g, "").toLowerCase()
+  ));
 
   async function saveReview(event: FormEvent) {
     event.preventDefault();
@@ -262,9 +280,9 @@ export default function ResearchCandidatesClient({ displayName }: { displayName:
               <article><span>Official research</span><strong>{dashboard.metrics.researching}</strong><small>Records with a suggested official source</small></article>
               <article><span>Human reviewed</span><strong>{dashboard.metrics.reviewed}</strong><small>{dashboard.metrics.excludedSensitive} excluded by safety policy</small></article>
               <article>
-                <span>Verified accuracy</span>
+                <span>Confident match accuracy</span>
                 <strong>{dashboard.metrics.verifiedAccuracy === null ? "—" : `${Math.round(dashboard.metrics.verifiedAccuracy * 100)}%`}</strong>
-                <small>{dashboard.metrics.verifiedCorrect + dashboard.metrics.verifiedIncorrect} match decisions checked</small>
+                <small>{dashboard.metrics.reviewedConfidentMatches} exact or probable suggestions checked</small>
               </article>
               <article><span>Directory ready</span><strong>{dashboard.metrics.directoryReady}</strong><small>Verified privately; still not published</small></article>
             </section>
@@ -273,8 +291,9 @@ export default function ResearchCandidatesClient({ displayName }: { displayName:
               <div>
                 <strong>{dashboard.metrics.scaleGate.ready ? "100-record daily runs are eligible for operator approval." : "The 100-record daily run remains locked."}</strong>
                 <span>
-                  Gate: at least {dashboard.metrics.scaleGate.minimumReviewed} reviewed, {Math.round(dashboard.metrics.scaleGate.minimumAccuracy * 100)}% verified match accuracy,
-                  {dashboard.metrics.scaleGate.requiredPrivacyClearances} privacy clearances, and {dashboard.metrics.scaleGate.requiredDirectoryReady} directory-ready records.
+                  Gate: at least {dashboard.metrics.scaleGate.minimumReviewed} reviewed, {Math.round(dashboard.metrics.scaleGate.minimumAccuracy * 100)}% confident match accuracy,
+                  {dashboard.metrics.scaleGate.minimumConfidentMatches} confident suggestions checked, {dashboard.metrics.scaleGate.requiredPrivacyClearances} privacy clearances,
+                  and {dashboard.metrics.scaleGate.requiredDirectoryReady} directory-ready records.
                 </span>
               </div>
               <b>{dashboard.metrics.scaleGate.ready ? "Gate passed" : "Pilot mode"}</b>
@@ -444,6 +463,32 @@ export default function ResearchCandidatesClient({ displayName }: { displayName:
                             {verificationLabel[selected.verificationState] || selected.verificationState}
                           </span>
                         </div>
+
+                        <fieldset className="verified-address-fields">
+                          <legend>Verified public address</legend>
+                          <p>
+                            Original candidate: {text(selected.proposedChanges.address)}, {text(selected.proposedChanges.city)} {text(selected.proposedChanges.postalCode)}
+                          </p>
+                          <div>
+                            <label className="full-row">
+                              Address
+                              <input value={verification.verifiedAddress} onChange={(event) => updateVerification("verifiedAddress", event.target.value)} required />
+                            </label>
+                            <label>
+                              City
+                              <input value={verification.verifiedCity} onChange={(event) => updateVerification("verifiedCity", event.target.value)} required />
+                            </label>
+                            <label>
+                              Postal code
+                              <input value={verification.verifiedPostalCode} onChange={(event) => updateVerification("verifiedPostalCode", event.target.value)} placeholder="M2N 0E3" required />
+                            </label>
+                          </div>
+                          {addressDiscrepancy && (
+                            <div className="address-discrepancy" role="status">
+                              Address correction recorded for human review. The original source evidence is preserved.
+                            </div>
+                          )}
+                        </fieldset>
 
                         <div className="verification-grid">
                           <label>

@@ -367,3 +367,57 @@ test("Phase 5B schema records private verification state and directory readiness
   assert.match(migration, /ADD `directory_ready`/);
   assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
 });
+
+test("Phase 5B.2 matcher prioritizes facility identity and versions every suggestion", async () => {
+  const research = await read("db/research.ts");
+
+  assert.match(research, /MATCHER_VERSION = "phase5b\.2-v2"/);
+  assert.match(research, /facilityScore \* 0\.8 \+ organizationScore \* 0\.1/);
+  assert.match(research, /exactFacility/);
+  assert.match(research, /first\.score < 0\.7/);
+  assert.match(research, /first\.score - second\.score < 0\.08/);
+});
+
+test("Phase 5B.2 refresh reopens only changed suggestions without erasing research evidence", async () => {
+  const research = await read("db/research.ts");
+  const refresh = research.slice(
+    research.indexOf("async function refreshPhase5B2Matches"),
+    research.indexOf("export async function ensureTorontoResearchPilot"),
+  );
+
+  assert.match(refresh, /review_state = 'reviewed' THEN 'pending'/);
+  assert.match(refresh, /review_outcome = CASE WHEN \? = 1 THEN NULL/);
+  assert.match(refresh, /directory_ready = CASE WHEN \? = 1 THEN 0/);
+  assert.doesNotMatch(refresh, /verification_json\s*=/);
+  assert.doesNotMatch(refresh, /reviewer_notes\s*=/);
+});
+
+test("Phase 5B.2 accuracy gate evaluates confident suggestions only", async () => {
+  const [research, client] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+  ]);
+
+  assert.match(research, /match_state IN \('exact', 'probable'\).*AS verified_correct/s);
+  assert.match(research, /reviewedConfidentMatches >= 5/);
+  assert.match(research, /minimumConfidentMatches: 5/);
+  assert.match(client, /Confident match accuracy/);
+  assert.match(client, /exact or probable suggestions checked/);
+});
+
+test("Phase 5B.2 stores verified address corrections privately and preserves the source proposal", async () => {
+  const [research, client] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+  ]);
+
+  for (const field of ["verifiedAddress", "verifiedCity", "verifiedPostalCode"]) {
+    assert.match(research, new RegExp(field));
+    assert.match(client, new RegExp(field));
+  }
+  assert.match(research, /valid Canadian postal code/);
+  assert.match(research, /address: verification\.verifiedAddress/);
+  assert.match(client, /original source evidence is preserved/i);
+  assert.match(client, /Nothing publishes automatically/);
+  assert.doesNotMatch(research, /UPDATE shelters SET|INSERT INTO shelters/);
+});

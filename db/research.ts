@@ -13,6 +13,7 @@ const TORONTO_LICENCE = "Open Government Licence – Toronto";
 const TORONTO_LICENCE_URL = "https://open.toronto.ca/open-data-licence/";
 const SNAPSHOT_DATE = "2026-07-29";
 const SNAPSHOT_TIME = Date.parse("2026-07-29T20:00:00Z");
+const MATCHER_VERSION = "phase5b.2-v2";
 
 const researchSchemaStatements = [
   `CREATE TABLE IF NOT EXISTS research_batches (
@@ -127,55 +128,89 @@ type Match = {
 };
 
 function bestMatch(source: TorontoResearchSeed, staging: Row[], shelters: Row[]) {
-  const sourceNames = [source.name, source.group, source.org].filter(Boolean);
   const candidates: Match[] = [];
 
   for (const row of staging) {
     const parsed = parseObject(row.parsed_json);
-    const candidateNames = [
-      stringValue(parsed.name),
-      stringValue(parsed.umbrellaOrganization),
-    ].filter(Boolean);
-    const nameScore = Math.max(...sourceNames.flatMap((left) => candidateNames.map((right) => similarity(left, right))), 0);
+    const candidateName = stringValue(parsed.name);
+    const facilityScore = Math.max(
+      similarity(source.name, candidateName),
+      similarity(source.group, candidateName),
+    );
+    const exactFacility = [source.name, source.group]
+      .some((value) => normalize(value) === normalize(candidateName));
+    const organizationScore = similarity(source.org, stringValue(parsed.umbrellaOrganization));
     const sameProvince = stringValue(parsed.provinceCode).toUpperCase() === "ON";
     const cityScore = similarity(source.city, stringValue(parsed.city));
-    const score = Math.min(1, nameScore * 0.9 + (sameProvince ? 0.04 : 0) + cityScore * 0.06);
+    const modelScore = Math.max(
+      ...source.models.map((model) => similarity(model, stringValue(parsed.shelterType))),
+      0,
+    );
+    const score = exactFacility
+      ? Math.min(1, 0.93 + cityScore * 0.04 + (sameProvince ? 0.03 : 0))
+      : Math.min(1, facilityScore * 0.8 + organizationScore * 0.1
+        + cityScore * 0.05 + (sameProvince ? 0.03 : 0) + modelScore * 0.02);
     candidates.push({
       id: stringValue(row.id),
       score,
-      name: stringValue(parsed.name),
-      explanation: `Name ${Math.round(nameScore * 100)}% · city ${Math.round(cityScore * 100)}% · Ontario ${sameProvince ? "yes" : "no"}`,
+      name: candidateName,
+      explanation: `Facility ${Math.round(facilityScore * 100)}% · organization ${Math.round(organizationScore * 100)}% · city ${Math.round(cityScore * 100)}%`,
     });
   }
 
   for (const row of shelters) {
-    const nameScore = Math.max(...sourceNames.map((left) => similarity(left, stringValue(row.name))), 0);
+    const candidateName = stringValue(row.name);
+    const facilityScore = Math.max(
+      similarity(source.name, candidateName),
+      similarity(source.group, candidateName),
+    );
+    const exactFacility = [source.name, source.group]
+      .some((value) => normalize(value) === normalize(candidateName));
+    const organizationScore = similarity(source.org, stringValue(row.umbrella_organization));
     const sameProvince = stringValue(row.province_code).toUpperCase() === "ON";
     const cityScore = similarity(source.city, stringValue(row.city));
-    const score = Math.min(1, nameScore * 0.9 + (sameProvince ? 0.04 : 0) + cityScore * 0.06);
+    const modelScore = Math.max(
+      ...source.models.map((model) => similarity(model, stringValue(row.shelter_type))),
+      0,
+    );
+    const score = exactFacility
+      ? Math.min(1, 0.93 + cityScore * 0.04 + (sameProvince ? 0.03 : 0))
+      : Math.min(1, facilityScore * 0.8 + organizationScore * 0.1
+        + cityScore * 0.05 + (sameProvince ? 0.03 : 0) + modelScore * 0.02);
     candidates.push({
       id: stringValue(row.id),
       shelterId: stringValue(row.id),
       score,
-      name: stringValue(row.name),
-      explanation: `Existing shelter · name ${Math.round(nameScore * 100)}% · city ${Math.round(cityScore * 100)}%`,
+      name: candidateName,
+      explanation: `Existing shelter · facility ${Math.round(facilityScore * 100)}% · organization ${Math.round(organizationScore * 100)}% · city ${Math.round(cityScore * 100)}%`,
     });
   }
 
   candidates.sort((left, right) => right.score - left.score);
   const first = candidates[0];
   const second = candidates[1];
-  if (!first || first.score < 0.62) {
-    return { state: "unmatched", score: first?.score ?? 0, explanation: first ? `No strong match. Closest: ${first.name} (${Math.round(first.score * 100)}%).` : "No Ontario directory candidate found." };
+  if (!first || first.score < 0.7) {
+    return {
+      state: "unmatched",
+      score: first?.score ?? 0,
+      explanation: `${MATCHER_VERSION} · ${first
+        ? `No reliable facility match. Closest: ${first.name} (${Math.round(first.score * 100)}%).`
+        : "No Ontario directory candidate found."}`,
+    };
   }
-  if (second && second.score >= 0.62 && first.score - second.score < 0.04) {
-    return { state: "ambiguous", score: first.score, match: first, explanation: `Two close possibilities: ${first.name} and ${second.name}. Human choice required.` };
+  if (second && second.score >= 0.7 && first.score - second.score < 0.08) {
+    return {
+      state: "ambiguous",
+      score: first.score,
+      match: first,
+      explanation: `${MATCHER_VERSION} · Two close facility possibilities: ${first.name} and ${second.name}. Human choice required.`,
+    };
   }
   return {
-    state: first.score >= 0.94 ? "exact" : "probable",
+    state: first.score >= 0.96 ? "exact" : "probable",
     score: first.score,
     match: first,
-    explanation: `${first.name}: ${first.explanation}.`,
+    explanation: `${MATCHER_VERSION} · ${first.name}: ${first.explanation}.`,
   };
 }
 
@@ -263,6 +298,86 @@ async function ensurePhase5BVerificationSeeds() {
   await env.DB.batch(statements);
 }
 
+async function refreshPhase5B2Matches() {
+  const stale = await env.DB.prepare(`
+    SELECT COUNT(*) AS total FROM research_candidates
+    WHERE batch_id = ? AND match_explanation NOT LIKE ?
+  `).bind(TORONTO_BATCH_ID, `${MATCHER_VERSION}%`).first<{ total: number }>();
+  if (!Number(stale?.total || 0)) return;
+
+  const [candidateResult, stagingResult, shelterResult] = await Promise.all([
+    env.DB.prepare(`
+      SELECT id, source_row_json, match_state, matched_staging_record_id, matched_shelter_id,
+        review_state, verification_state
+      FROM research_candidates WHERE batch_id = ?
+    `).bind(TORONTO_BATCH_ID).all<Row>(),
+    env.DB.prepare(`
+      SELECT id, parsed_json FROM directory_staging_records
+      WHERE review_state = 'pending'
+        AND UPPER(COALESCE(json_extract(parsed_json, '$.provinceCode'), '')) = 'ON'
+    `).all<Row>(),
+    env.DB.prepare(`
+      SELECT id, name, city, province_code, umbrella_organization, shelter_type
+      FROM shelters
+      WHERE province_code = 'ON' AND publication_state != 'archived'
+    `).all<Row>(),
+  ]);
+
+  const statements = [];
+  const matchCounts = { exact: 0, probable: 0, ambiguous: 0, unmatched: 0 };
+  for (const row of candidateResult.results) {
+    const source = parseObject(row.source_row_json) as unknown as TorontoResearchSeed;
+    const match = bestMatch(source, stagingResult.results, shelterResult.results);
+    matchCounts[match.state as keyof typeof matchCounts] += 1;
+    const stagingId = match.match && !match.match.shelterId ? match.match.id : null;
+    const shelterId = match.match?.shelterId ?? null;
+    const changed = stringValue(row.match_state) !== match.state
+      || stringValue(row.matched_staging_record_id) !== (stagingId ?? "")
+      || stringValue(row.matched_shelter_id) !== (shelterId ?? "");
+
+    statements.push(env.DB.prepare(`
+      UPDATE research_candidates
+      SET matched_staging_record_id = ?, matched_shelter_id = ?, match_state = ?,
+        match_score = ?, match_explanation = ?,
+        review_state = CASE
+          WHEN ? = 1 AND review_state = 'reviewed' THEN 'pending'
+          ELSE review_state
+        END,
+        review_outcome = CASE WHEN ? = 1 THEN NULL ELSE review_outcome END,
+        directory_ready = CASE WHEN ? = 1 THEN 0 ELSE directory_ready END,
+        verification_state = CASE
+          WHEN ? = 1 AND verification_state = 'verified' THEN 'researching'
+          ELSE verification_state
+        END
+      WHERE id = ? AND batch_id = ?
+    `).bind(
+      stagingId,
+      shelterId,
+      match.state,
+      Number(match.score.toFixed(4)),
+      match.explanation,
+      changed ? 1 : 0,
+      changed ? 1 : 0,
+      changed ? 1 : 0,
+      changed ? 1 : 0,
+      row.id,
+      TORONTO_BATCH_ID,
+    ));
+  }
+  statements.push(env.DB.prepare(`
+    UPDATE research_batches
+    SET exact_matches = ?, probable_matches = ?, ambiguous_matches = ?, unmatched_rows = ?
+    WHERE id = ?
+  `).bind(
+    matchCounts.exact,
+    matchCounts.probable,
+    matchCounts.ambiguous,
+    matchCounts.unmatched,
+    TORONTO_BATCH_ID,
+  ));
+  await env.DB.batch(statements);
+}
+
 export async function ensureTorontoResearchPilot() {
   await ensureDirectorySchema();
   await ensureResearchSchema();
@@ -271,6 +386,7 @@ export async function ensureTorontoResearchPilot() {
     .first<{ id: string }>();
   if (existing) {
     await ensurePhase5BVerificationSeeds();
+    await refreshPhase5B2Matches();
     return;
   }
   for (const source of torontoResearchPilot) {
@@ -295,7 +411,7 @@ export async function ensureTorontoResearchPilot() {
         AND UPPER(COALESCE(json_extract(parsed_json, '$.provinceCode'), '')) = 'ON'
     `).all<Row>(),
     env.DB.prepare(`
-      SELECT id, name, city, province_code FROM shelters
+      SELECT id, name, city, province_code, umbrella_organization, shelter_type FROM shelters
       WHERE province_code = 'ON' AND publication_state != 'archived'
     `).all<Row>(),
   ]);
@@ -371,6 +487,7 @@ export async function ensureTorontoResearchPilot() {
   await env.DB.batch(candidateStatements);
   await env.DB.batch(citationStatements);
   await ensurePhase5BVerificationSeeds();
+  await refreshPhase5B2Matches();
 }
 
 export async function getResearchDashboard(options: {
@@ -433,8 +550,12 @@ export async function getResearchDashboard(options: {
       SELECT
         COUNT(*) AS total,
         SUM(CASE WHEN review_state = 'reviewed' THEN 1 ELSE 0 END) AS reviewed,
-        SUM(CASE WHEN review_outcome = 'match_correct' THEN 1 ELSE 0 END) AS verified_correct,
-        SUM(CASE WHEN review_outcome = 'match_incorrect' THEN 1 ELSE 0 END) AS verified_incorrect,
+        SUM(CASE WHEN match_state IN ('exact', 'probable') AND review_state = 'reviewed' THEN 1 ELSE 0 END)
+          AS reviewed_confident_matches,
+        SUM(CASE WHEN match_state IN ('exact', 'probable') AND review_outcome = 'match_correct' THEN 1 ELSE 0 END)
+          AS verified_correct,
+        SUM(CASE WHEN match_state IN ('exact', 'probable') AND review_outcome = 'match_incorrect' THEN 1 ELSE 0 END)
+          AS verified_incorrect,
         SUM(CASE WHEN privacy_cleared = 1 THEN 1 ELSE 0 END) AS privacy_cleared
         , SUM(CASE WHEN directory_ready = 1 THEN 1 ELSE 0 END) AS directory_ready
         , SUM(CASE WHEN verification_state = 'researching' THEN 1 ELSE 0 END) AS researching
@@ -448,6 +569,7 @@ export async function getResearchDashboard(options: {
   const accuracyDenominator = verifiedCorrect + verifiedIncorrect;
   const verifiedAccuracy = accuracyDenominator ? verifiedCorrect / accuracyDenominator : null;
   const reviewed = Number(metrics?.reviewed || 0);
+  const reviewedConfidentMatches = Number(metrics?.reviewed_confident_matches || 0);
   const privacyCleared = Number(metrics?.privacy_cleared || 0);
   const directoryReady = Number(metrics?.directory_ready || 0);
 
@@ -456,6 +578,7 @@ export async function getResearchDashboard(options: {
     metrics: {
       total: Number(metrics?.total || 0),
       reviewed,
+      reviewedConfidentMatches,
       verifiedCorrect,
       verifiedIncorrect,
       verifiedAccuracy,
@@ -465,10 +588,12 @@ export async function getResearchDashboard(options: {
       excludedSensitive: Number(metrics?.excluded_sensitive || 0),
       scaleGate: {
         minimumReviewed: 20,
+        minimumConfidentMatches: 5,
         minimumAccuracy: 0.9,
         requiredPrivacyClearances: 20,
         requiredDirectoryReady: 20,
-        ready: reviewed >= 20 && verifiedAccuracy !== null && verifiedAccuracy >= 0.9
+        ready: reviewed >= 20 && reviewedConfidentMatches >= 5
+          && verifiedAccuracy !== null && verifiedAccuracy >= 0.9
           && privacyCleared >= 20 && directoryReady >= 20,
       },
     },
@@ -545,6 +670,7 @@ export async function reviewResearchCandidate(input: {
 }
 
 const verificationFields = [
+  "verifiedAddress", "verifiedCity", "verifiedPostalCode",
   "phone", "phoneDisplay", "website", "hours", "intake",
   "officialSourceUrl", "officialSourceTitle", "officialSourcePublisher",
 ] as const;
@@ -600,7 +726,8 @@ export async function saveResearchVerification(input: {
   }
   const allChecksComplete = verificationCheckFields.every((field) => checks[field]);
   const requiredFieldsComplete = Boolean(
-    verification.phone && verification.website && verification.hours && verification.intake
+    verification.verifiedAddress && verification.verifiedCity && verification.verifiedPostalCode
+    && verification.phone && verification.website && verification.hours && verification.intake
     && verification.officialSourceUrl && verification.officialSourceTitle && verification.officialSourcePublisher,
   );
   const reviewComplete = candidate.review_state === "reviewed"
@@ -608,9 +735,15 @@ export async function saveResearchVerification(input: {
   const directoryReady = allChecksComplete && requiredFieldsComplete && reviewComplete;
 
   if (allChecksComplete || directoryReady) {
+    if (!/^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i.test(verification.verifiedPostalCode)) {
+      throw new Error("Add a valid Canadian postal code for the verified public address.");
+    }
     assertShelterInScope({
       ...parseObject(candidate.proposed_changes_json),
       ...verification,
+      address: verification.verifiedAddress,
+      city: verification.verifiedCity,
+      postalCode: verification.verifiedPostalCode.toUpperCase(),
       scopeConfirmed: checks.scopeConfirmed,
     }, { requireConfirmation: true });
   }

@@ -646,9 +646,13 @@ h1 { max-width: 700px; margin: 0; font-family: Georgia, "Times New Roman", serif
 .verification-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .verification-grid .full-row { grid-column: 1 / -1; }
 .verification-form textarea { resize: vertical; }
-.official-source-fields, .verification-checks { margin: 0; padding: 15px; display: grid; gap: 11px; border: 1px solid #c7dad5; border-radius: 8px; background: #fff; }
-.official-source-fields legend, .verification-checks legend { padding: 0 6px; color: #405853; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.official-source-fields, .verification-checks, .verified-address-fields { margin: 0; padding: 15px; display: grid; gap: 11px; border: 1px solid #c7dad5; border-radius: 8px; background: #fff; }
+.official-source-fields legend, .verification-checks legend, .verified-address-fields legend { padding: 0 6px; color: #405853; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .official-source-fields a { width: max-content; color: var(--teal); font-size: 9px; font-weight: 800; }
+.verified-address-fields > p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.verified-address-fields > div:not(.address-discrepancy) { display: grid; grid-template-columns: 1fr 180px; gap: 12px; }
+.verified-address-fields .full-row { grid-column: 1 / -1; }
+.address-discrepancy { padding: 10px 12px; border-left: 3px solid #c9822b; color: #694412; background: #fff4dd; font-size: 9px; font-weight: 700; line-height: 1.45; }
 .verification-checks { grid-template-columns: 1fr 1fr; }
 .verification-checks label { grid-template-columns: auto 1fr; align-items: start; color: #405853; font-weight: 650; line-height: 1.4; }
 .verification-checks input { width: 16px; min-height: 16px; height: 16px; margin: 0; }
@@ -835,7 +839,8 @@ footer { padding: 38px clamp(24px, 7vw, 110px); display: grid; grid-template-col
   .candidate-heading { display: block; }
   .candidate-heading > strong { display: block; margin-top: 13px; }
   .candidate-fields { grid-template-columns: 1fr; }
-  .verification-grid, .verification-checks { grid-template-columns: 1fr; }
+  .verification-grid, .verification-checks, .verified-address-fields > div:not(.address-discrepancy) { grid-template-columns: 1fr; }
+  .verified-address-fields .full-row { grid-column: auto; }
   .verification-heading { display: grid; }
 }
 
