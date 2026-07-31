@@ -13,7 +13,7 @@ const TORONTO_LICENCE = "Open Government Licence – Toronto";
 const TORONTO_LICENCE_URL = "https://open.toronto.ca/open-data-licence/";
 const SNAPSHOT_DATE = "2026-07-29";
 const SNAPSHOT_TIME = Date.parse("2026-07-29T20:00:00Z");
-const MATCHER_VERSION = "phase5b.2-v2";
+const MATCHER_VERSION = "phase5b.3-v3";
 
 const researchSchemaStatements = [
   `CREATE TABLE IF NOT EXISTS research_batches (
@@ -106,7 +106,15 @@ const normalize = (value: string) => value
   .replace(/\b(the|of|canada|toronto|shelter|hostel|program|centre|center)\b/g, " ")
   .replace(/[^a-z0-9]+/g, " ")
   .trim();
-const tokens = (value: string) => new Set(normalize(value).split(/\s+/).filter((item) => item.length > 1));
+const tokens = (value: string) => new Set(normalize(value).split(/\s+/).filter(Boolean));
+const placeKey = (value: string) => value
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9]+/g, " ")
+  .trim();
+const samePlace = (left: string, right: string) =>
+  Boolean(placeKey(left) && placeKey(left) === placeKey(right));
 const similarity = (left: string, right: string) => {
   const normalizedLeft = normalize(left);
   const normalizedRight = normalize(right);
@@ -141,7 +149,7 @@ function bestMatch(source: TorontoResearchSeed, staging: Row[], shelters: Row[])
       .some((value) => normalize(value) === normalize(candidateName));
     const organizationScore = similarity(source.org, stringValue(parsed.umbrellaOrganization));
     const sameProvince = stringValue(parsed.provinceCode).toUpperCase() === "ON";
-    const cityScore = similarity(source.city, stringValue(parsed.city));
+    const cityScore = samePlace(source.city, stringValue(parsed.city)) ? 1 : 0;
     const modelScore = Math.max(
       ...source.models.map((model) => similarity(model, stringValue(parsed.shelterType))),
       0,
@@ -168,7 +176,7 @@ function bestMatch(source: TorontoResearchSeed, staging: Row[], shelters: Row[])
       .some((value) => normalize(value) === normalize(candidateName));
     const organizationScore = similarity(source.org, stringValue(row.umbrella_organization));
     const sameProvince = stringValue(row.province_code).toUpperCase() === "ON";
-    const cityScore = similarity(source.city, stringValue(row.city));
+    const cityScore = samePlace(source.city, stringValue(row.city)) ? 1 : 0;
     const modelScore = Math.max(
       ...source.models.map((model) => similarity(model, stringValue(row.shelter_type))),
       0,

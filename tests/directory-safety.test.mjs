@@ -369,12 +369,14 @@ test("Phase 5B schema records private verification state and directory readiness
   assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
 });
 
-test("Phase 5B.2 matcher prioritizes facility identity and versions every suggestion", async () => {
+test("Phase 5B.3 matcher preserves acronyms, compares cities, and versions every suggestion", async () => {
   const research = await read("db/research.ts");
 
-  assert.match(research, /MATCHER_VERSION = "phase5b\.2-v2"/);
+  assert.match(research, /MATCHER_VERSION = "phase5b\.3-v3"/);
   assert.match(research, /facilityScore \* 0\.8 \+ organizationScore \* 0\.1/);
   assert.match(research, /exactFacility/);
+  assert.match(research, /split\(\/\\s\+\/\)\.filter\(Boolean\)/);
+  assert.match(research, /samePlace\(source\.city/);
   assert.match(research, /first\.score < 0\.7/);
   assert.match(research, /first\.score - second\.score < 0\.08/);
   assert.doesNotMatch(
