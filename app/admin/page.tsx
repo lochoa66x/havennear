@@ -43,6 +43,7 @@ export default async function ShelterAdminPage() {
               <Link className="admin-secondary-link" href="/admin/participants">Review participation requests</Link>
               <Link className="admin-secondary-link" href="/admin/corrections">Review community corrections</Link>
               <Link className="admin-secondary-link" href="/admin/directory">Review the national directory</Link>
+              <Link className="admin-secondary-link" href="/admin/research">Run private data enrichment</Link>
             </>
           )}
         </div>

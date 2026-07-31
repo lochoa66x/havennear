@@ -203,3 +203,221 @@ test("Phase 4C shelter claims preselect and prefill the published listing", asyn
   assert.match(join, /setOrganizationName/);
   assert.match(join, /claim-selection/);
 });
+
+test("Phase 5A research candidates are private, operator-only, and never auto-published", async () => {
+  const [page, api, research] = await Promise.all([
+    read("app/admin/research/page.tsx"),
+    read("app/api/admin/research/route.ts"),
+    read("db/research.ts"),
+  ]);
+
+  assert.match(page, /requireOperatorPage\("\/admin\/research"\)/);
+  assert.match(api, /requireOperatorApi/);
+  assert.match(research, /publication_guard.*private_review_only/s);
+  assert.match(research, /review_state = 'reviewed'/);
+  assert.doesNotMatch(research, /UPDATE shelters SET|INSERT INTO shelters/);
+});
+
+test("Phase 5A Toronto pilot contains exactly 25 dated structured records without live capacity", async () => {
+  const seed = await read("db/toronto-research-seed.ts");
+  const records = seed.match(/\{ id: "\d+"/g) || [];
+
+  assert.equal(records.length, 25);
+  assert.match(seed, /official City of Toronto feed/);
+  assert.doesNotMatch(seed, /spacesAvailable|occupiedBeds|capacityActual|availabilityStatus/);
+});
+
+test("Phase 5A attaches provenance to every proposal and measures verified accuracy before scaling", async () => {
+  const [research, client, migration] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+    read("drizzle/0005_useful_bruce_banner.sql"),
+  ]);
+
+  assert.match(research, /research_candidate_citations/);
+  assert.match(research, /Open Government Licence – Toronto/);
+  assert.match(research, /verifiedAccuracy/);
+  assert.match(research, /minimumReviewed: 20/);
+  assert.match(research, /minimumAccuracy: 0\.9/);
+  assert.match(client, /100-record daily run remains locked/);
+  assert.match(client, /Publication lock is on/);
+  assert.match(migration, /research_candidates/);
+  assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
+});
+
+test("sensitive-shelter policy is a hard guard from import through publication", async () => {
+  const [policy, directory, client] = await Promise.all([
+    read("db/shelter-scope-policy.ts"),
+    read("db/directory.ts"),
+    read("app/admin/directory/DirectoryReviewClient.tsx"),
+  ]);
+
+  assert.match(policy, /Confidential or protected location/);
+  assert.match(policy, /Women-only service/);
+  assert.match(policy, /violence against women/);
+  assert.match(policy, /refugee/);
+  assert.match(policy, /motel\\\/hotel shelter/);
+  assert.match(directory, /reviewState = scope\.eligible \? "pending" : "excluded_sensitive"/);
+  assert.match(directory, /assertShelterInScope\(stage\.parsed, \{ requireConfirmation: true \}\)/);
+  assert.match(directory, /scope_state = 'eligible_general'/);
+  assert.match(client, /Hard safety boundary/);
+  assert.match(client, /General-shelter scope confirmed/);
+});
+
+test("public directory requires an eligible general-shelter scope state", async () => {
+  const directory = await read("db/directory.ts");
+  const publicQuery = directory.slice(
+    directory.indexOf("export async function listPublishedShelters"),
+    directory.indexOf("function parseCsv"),
+  );
+
+  assert.match(publicQuery, /s\.scope_state = 'eligible_general'/);
+  assert.match(directory, /AND scope_state = 'eligible_general'/);
+});
+
+test("migration archives known sensitive Montreal listings and replaces the unscreened Toronto pilot", async () => {
+  const migration = await read("drizzle/0006_unusual_terror.sql");
+
+  for (const id of ["old-brewery-mackenzie", "chez-doris", "dans-la-rue-bunker", "auberge-shalom"]) {
+    assert.match(migration, new RegExp(id));
+  }
+  assert.match(migration, /scope_state` = 'excluded_sensitive'/);
+  assert.match(migration, /research_toronto_20260729_pilot25/);
+  assert.match(migration, /DELETE FROM `research_candidates`/);
+});
+
+test("screened Toronto research seed contains only 25 public established locations", async () => {
+  const [seed, research] = await Promise.all([
+    read("db/toronto-research-seed.ts"),
+    read("db/research.ts"),
+  ]);
+  const records = seed.match(/\{ id: "\d+"/g) || [];
+  const recordsOnly = seed.slice(seed.indexOf("export const torontoResearchPilot"));
+
+  assert.equal(records.length, 25);
+  assert.doesNotMatch(recordsOnly, /refugee|women's|women-only|motel\/hotel|hotel program|confidential|violence|victim|survivor/i);
+  assert.match(research, /assertShelterInScope/);
+  assert.match(research, /general25_v2/);
+});
+
+test("Phase 5B seeds official operator and government sources without publishing them", async () => {
+  const [seed, research] = await Promise.all([
+    read("db/toronto-verification-seed.ts"),
+    read("db/research.ts"),
+  ]);
+  const records = seed.match(/sourceRecordId: "\d+"/g) || [];
+
+  assert.equal(records.length, 22);
+  assert.match(seed, /checked on 2026-07-30/);
+  assert.match(seed, /City of Toronto|Covenant House Toronto|Dixon Hall/);
+  assert.match(research, /verification_\$\{candidateId\}/);
+  assert.match(research, /verification_state = 'unstarted'/);
+  assert.doesNotMatch(research, /UPDATE shelters SET|INSERT INTO shelters/);
+});
+
+test("Phase 5B verification requires official facts and all seven safety checks", async () => {
+  const [research, client, api] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+    read("app/api/admin/research/route.ts"),
+  ]);
+
+  for (const check of [
+    "officialSourceConfirmed", "addressConfirmed", "phoneConfirmed",
+    "hoursConfirmed", "intakeConfirmed", "scopeConfirmed", "duplicateChecked",
+  ]) {
+    assert.match(research, new RegExp(check));
+    assert.match(client, new RegExp(check));
+  }
+  assert.match(research, /Official sources must use HTTPS/);
+  assert.match(research, /assertShelterInScope/);
+  assert.match(research, /requiredDirectoryReady: 20/);
+  assert.match(client, /Nothing publishes automatically/);
+  assert.match(api, /saveResearchVerification/);
+  assert.match(api, /body\.action === "verification"/);
+});
+
+test("Phase 5B hard-excludes sensitive or specialized candidates", async () => {
+  const [seed, migration, research] = await Promise.all([
+    read("db/toronto-verification-seed.ts"),
+    read("drizzle/0007_bored_northstar.sql"),
+    read("db/research.ts"),
+  ]);
+
+  for (const id of ["1053", "1054", "1741", "1001"]) {
+    assert.match(migration, new RegExp(`'${id}'`));
+  }
+  assert.equal((seed.match(/exclusionReason:/g) || []).length, 4);
+  assert.match(migration, /excluded_sensitive/);
+  assert.match(research, /review_state != 'excluded_sensitive'/);
+  assert.match(research, /This candidate is excluded by the sensitive-shelter policy/);
+});
+
+test("Phase 5B schema records private verification state and directory readiness", async () => {
+  const [schema, migration] = await Promise.all([
+    read("db/schema.ts"),
+    read("drizzle/0007_bored_northstar.sql"),
+  ]);
+
+  assert.match(schema, /verificationJson/);
+  assert.match(schema, /verificationChecksJson/);
+  assert.match(schema, /verificationState/);
+  assert.match(schema, /directoryReady/);
+  assert.match(migration, /ADD `verification_json`/);
+  assert.match(migration, /ADD `directory_ready`/);
+  assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
+});
+
+test("Phase 5B.2 matcher prioritizes facility identity and versions every suggestion", async () => {
+  const research = await read("db/research.ts");
+
+  assert.match(research, /MATCHER_VERSION = "phase5b\.2-v2"/);
+  assert.match(research, /facilityScore \* 0\.8 \+ organizationScore \* 0\.1/);
+  assert.match(research, /exactFacility/);
+  assert.match(research, /first\.score < 0\.7/);
+  assert.match(research, /first\.score - second\.score < 0\.08/);
+});
+
+test("Phase 5B.2 refresh reopens only changed suggestions without erasing research evidence", async () => {
+  const research = await read("db/research.ts");
+  const refresh = research.slice(
+    research.indexOf("async function refreshPhase5B2Matches"),
+    research.indexOf("export async function ensureTorontoResearchPilot"),
+  );
+
+  assert.match(refresh, /review_state = 'reviewed' THEN 'pending'/);
+  assert.match(refresh, /review_outcome = CASE WHEN \? = 1 THEN NULL/);
+  assert.match(refresh, /directory_ready = CASE WHEN \? = 1 THEN 0/);
+  assert.doesNotMatch(refresh, /verification_json\s*=/);
+  assert.doesNotMatch(refresh, /reviewer_notes\s*=/);
+});
+
+test("Phase 5B.2 accuracy gate evaluates confident suggestions only", async () => {
+  const [research, client] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+  ]);
+
+  assert.match(research, /match_state IN \('exact', 'probable'\).*AS verified_correct/s);
+  assert.match(research, /reviewedConfidentMatches >= 5/);
+  assert.match(research, /minimumConfidentMatches: 5/);
+  assert.match(client, /Confident match accuracy/);
+  assert.match(client, /exact or probable suggestions checked/);
+});
+
+test("Phase 5B.2 stores verified address corrections privately and preserves the source proposal", async () => {
+  const [research, client] = await Promise.all([
+    read("db/research.ts"),
+    read("app/admin/research/ResearchCandidatesClient.tsx"),
+  ]);
+
+  for (const field of ["verifiedAddress", "verifiedCity", "verifiedPostalCode"]) {
+    assert.match(research, new RegExp(field));
+    assert.match(client, new RegExp(field));
+  }
+  assert.match(research, /valid Canadian postal code/);
+  assert.match(research, /address: verification\.verifiedAddress/);
+  assert.match(client, /original source evidence is preserved/i);
+  assert.match(client, /Nothing publishes automatically/);
+  assert.doesNotMatch(research, /UPDATE shelters SET|INSERT INTO shelters/);
+});

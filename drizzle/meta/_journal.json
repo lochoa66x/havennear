@@ -36,6 +36,27 @@
       "when": 1785290400000,
       "tag": "0004_community_corrections",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785420209823,
+      "tag": "0005_useful_bruce_banner",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785425753863,
+      "tag": "0006_unusual_terror",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785439803121,
+      "tag": "0007_bored_northstar",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ type ParsedShelter = {
   targetClientele?: string;
   genderServed?: string;
   sourceYear?: number;
+  scopeConfirmed?: boolean;
 };
 type Draft = ParsedShelter & { notes?: string; mergeTarget?: string };
 type Stage = Row & {
@@ -82,11 +83,12 @@ function readinessFor(draft: Draft) {
   const checks = [
     { label: "Public phone", complete: Boolean(draft.phone?.trim()) },
     {
-      label: draft.confidentialAddress ? "Confidential location protected" : "Public address",
-      complete: Boolean(draft.confidentialAddress || draft.address?.trim()),
+      label: "Public address",
+      complete: Boolean(!draft.confidentialAddress && draft.address?.trim()),
     },
     { label: "Current hours", complete: Boolean(draft.hours?.trim()) },
     { label: "Intake guidance", complete: Boolean(draft.intake?.trim()) },
+    { label: "General-shelter scope confirmed", complete: draft.scopeConfirmed === true },
   ];
   return {
     checks,
@@ -227,6 +229,7 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
         </Link>
         <div className="admin-header-actions">
           <span className="preview-badge">Private pilot</span>
+          <Link className="admin-back" href="/admin/research">Research candidates</Link>
           <Link className="admin-back" href="/admin/corrections">Correction requests</Link>
           <Link className="admin-back" href="/admin/participants">Participation requests</Link>
           <Link className="admin-back" href="/admin">Shelter workspace</Link>
@@ -376,6 +379,14 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
                         </ul>
                       </section>
 
+                      <div className="scope-policy-card">
+                        <strong>Hard safety boundary</strong>
+                        <span>
+                          Never include violence- or victim-serving shelters, women-only crisis services,
+                          protected-person or refugee-specific programs, confidential locations, or temporary sites.
+                        </span>
+                      </div>
+
                       {selectedStage.duplicateCandidates.length > 0 && (
                         <div className="duplicate-list">
                           <strong>Possible duplicate</strong>
@@ -415,10 +426,9 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
                           <label>Province<input value={selectedDraft.provinceCode || ""} maxLength={2} onChange={(event) => updateDraft(selectedStage.id, "provinceCode", event.target.value.toUpperCase())} /></label>
                           <label className="wide">Address<input value={selectedDraft.address || ""} disabled={selectedDraft.confidentialAddress} onChange={(event) => updateDraft(selectedStage.id, "address", event.target.value)} /></label>
                           <label>Postal code<input value={selectedDraft.postalCode || ""} onChange={(event) => updateDraft(selectedStage.id, "postalCode", event.target.value)} /></label>
-                          <label className="confidential-check">
-                            <input type="checkbox" checked={Boolean(selectedDraft.confidentialAddress)} onChange={(event) => updateDraft(selectedStage.id, "confidentialAddress", event.target.checked)} />
-                            Confidential location
-                          </label>
+                          {selectedDraft.confidentialAddress && (
+                            <p className="scope-exclusion">This confidential location is outside HavenNear&apos;s scope and cannot be approved.</p>
+                          )}
                         </div>
                       </div>
 
@@ -437,6 +447,15 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
                         <div className="stage-fields focused-fields">
                           <label className="wide">Groups<input value={(selectedDraft.groups || []).join("; ")} onChange={(event) => updateDraft(selectedStage.id, "groups", event.target.value.split(";").map((item) => item.trim()).filter(Boolean))} /></label>
                           <label className="wide">Services<input value={(selectedDraft.services || []).join("; ")} onChange={(event) => updateDraft(selectedStage.id, "services", event.target.value.split(";").map((item) => item.trim()).filter(Boolean))} /></label>
+                          <label className="full scope-confirmation">
+                            <input
+                              type="checkbox"
+                              checked={selectedDraft.scopeConfirmed === true}
+                              onChange={(event) => updateDraft(selectedStage.id, "scopeConfirmed", event.target.checked)}
+                            />
+                            I confirmed this is a well-known, established, public-facing general shelter—not a violence,
+                            victim, women-only crisis, protected-person, confidential, refugee-specific, or temporary program.
+                          </label>
                           <label className="full">Reviewer notes<textarea rows={3} value={selectedDraft.notes || ""} onChange={(event) => updateDraft(selectedStage.id, "notes", event.target.value)} placeholder="Record source checks and safety decisions. Never enter guest information." /></label>
                         </div>
                       </div>
@@ -477,7 +496,8 @@ export default function DirectoryReviewClient({ displayName }: { displayName: st
               <summary>Import another source CSV</summary>
               <p className="review-help">
                 New imports remain private. Useful columns include name, shelter type, address,
-                city, province, phone, website, hours, intake, groups, services, and confidential address.
+                city, province, phone, website, hours, intake, groups, and services. Sensitive or
+                confidential services are automatically excluded and can never be published.
               </p>
               <form className="import-form" onSubmit={importCsv}>
                 <label>Dataset name<input name="datasetName" required maxLength={200} placeholder="Example: City shelter directory" /></label>
