@@ -317,7 +317,7 @@ async function refreshPhase5B2Matches() {
         AND UPPER(COALESCE(json_extract(parsed_json, '$.provinceCode'), '')) = 'ON'
     `).all<Row>(),
     env.DB.prepare(`
-      SELECT id, name, city, province_code, umbrella_organization, shelter_type
+      SELECT id, name, city, province_code, shelter_type
       FROM shelters
       WHERE province_code = 'ON' AND publication_state != 'archived'
     `).all<Row>(),
@@ -411,7 +411,7 @@ export async function ensureTorontoResearchPilot() {
         AND UPPER(COALESCE(json_extract(parsed_json, '$.provinceCode'), '')) = 'ON'
     `).all<Row>(),
     env.DB.prepare(`
-      SELECT id, name, city, province_code, umbrella_organization, shelter_type FROM shelters
+      SELECT id, name, city, province_code, shelter_type FROM shelters
       WHERE province_code = 'ON' AND publication_state != 'archived'
     `).all<Row>(),
   ]);

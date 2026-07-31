@@ -376,6 +376,10 @@ test("Phase 5B.2 matcher prioritizes facility identity and versions every sugges
   assert.match(research, /exactFacility/);
   assert.match(research, /first\.score < 0\.7/);
   assert.match(research, /first\.score - second\.score < 0\.08/);
+  assert.doesNotMatch(
+    research,
+    /SELECT id, name, city, province_code, umbrella_organization, shelter_type FROM shelters/,
+  );
 });
 
 test("Phase 5B.2 refresh reopens only changed suggestions without erasing research evidence", async () => {
