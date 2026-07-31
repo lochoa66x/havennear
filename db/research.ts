@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { ensureDirectorySchema } from "./directory";
-import { assertShelterInScope } from "./shelter-scope-policy";
+import { assessShelterScope, assertShelterInScope } from "./shelter-scope-policy";
+import { bestResearchMatch, MATCHER_VERSION } from "./research-matcher.js";
 import { torontoResearchPilot, type TorontoResearchSeed } from "./toronto-research-seed";
 import { torontoVerificationSeeds } from "./toronto-verification-seed";
 
@@ -13,7 +14,6 @@ const TORONTO_LICENCE = "Open Government Licence – Toronto";
 const TORONTO_LICENCE_URL = "https://open.toronto.ca/open-data-licence/";
 const SNAPSHOT_DATE = "2026-07-29";
 const SNAPSHOT_TIME = Date.parse("2026-07-29T20:00:00Z");
-const MATCHER_VERSION = "phase5b.3-v3";
 
 const researchSchemaStatements = [
   `CREATE TABLE IF NOT EXISTS research_batches (
@@ -99,127 +99,38 @@ const parseList = (value: unknown) => {
     return [];
   }
 };
-const normalize = (value: string) => value
-  .toLowerCase()
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .replace(/\b(the|of|canada|toronto|shelter|hostel|program|centre|center)\b/g, " ")
-  .replace(/[^a-z0-9]+/g, " ")
-  .trim();
-const tokens = (value: string) => new Set(normalize(value).split(/\s+/).filter(Boolean));
-const placeKey = (value: string) => value
-  .toLowerCase()
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .replace(/[^a-z0-9]+/g, " ")
-  .trim();
-const samePlace = (left: string, right: string) =>
-  Boolean(placeKey(left) && placeKey(left) === placeKey(right));
-const similarity = (left: string, right: string) => {
-  const normalizedLeft = normalize(left);
-  const normalizedRight = normalize(right);
-  if (!normalizedLeft || !normalizedRight) return 0;
-  if (normalizedLeft === normalizedRight) return 1;
-  const leftTokens = tokens(left);
-  const rightTokens = tokens(right);
-  const intersection = [...leftTokens].filter((item) => rightTokens.has(item)).length;
-  const union = new Set([...leftTokens, ...rightTokens]).size;
-  return union ? intersection / union : 0;
-};
-
-type Match = {
-  id: string;
-  shelterId?: string;
-  score: number;
-  explanation: string;
-  name: string;
-};
-
 function bestMatch(source: TorontoResearchSeed, staging: Row[], shelters: Row[]) {
-  const candidates: Match[] = [];
+  const candidates: Array<Record<string, string>> = [];
 
   for (const row of staging) {
     const parsed = parseObject(row.parsed_json);
-    const candidateName = stringValue(parsed.name);
-    const facilityScore = Math.max(
-      similarity(source.name, candidateName),
-      similarity(source.group, candidateName),
-    );
-    const exactFacility = [source.name, source.group]
-      .some((value) => normalize(value) === normalize(candidateName));
-    const organizationScore = similarity(source.org, stringValue(parsed.umbrellaOrganization));
-    const sameProvince = stringValue(parsed.provinceCode).toUpperCase() === "ON";
-    const cityScore = samePlace(source.city, stringValue(parsed.city)) ? 1 : 0;
-    const modelScore = Math.max(
-      ...source.models.map((model) => similarity(model, stringValue(parsed.shelterType))),
-      0,
-    );
-    const score = exactFacility
-      ? Math.min(1, 0.93 + cityScore * 0.04 + (sameProvince ? 0.03 : 0))
-      : Math.min(1, facilityScore * 0.8 + organizationScore * 0.1
-        + cityScore * 0.05 + (sameProvince ? 0.03 : 0) + modelScore * 0.02);
+    if (!assessShelterScope(parsed).eligible) continue;
     candidates.push({
       id: stringValue(row.id),
-      score,
-      name: candidateName,
-      explanation: `Facility ${Math.round(facilityScore * 100)}% · organization ${Math.round(organizationScore * 100)}% · city ${Math.round(cityScore * 100)}%`,
+      name: stringValue(parsed.name),
+      organization: stringValue(parsed.umbrellaOrganization),
+      city: stringValue(parsed.city),
+      province: stringValue(parsed.provinceCode),
+      shelterType: stringValue(parsed.shelterType),
+      address: stringValue(parsed.address),
+      postalCode: stringValue(parsed.postalCode),
     });
   }
 
   for (const row of shelters) {
-    const candidateName = stringValue(row.name);
-    const facilityScore = Math.max(
-      similarity(source.name, candidateName),
-      similarity(source.group, candidateName),
-    );
-    const exactFacility = [source.name, source.group]
-      .some((value) => normalize(value) === normalize(candidateName));
-    const organizationScore = similarity(source.org, stringValue(row.umbrella_organization));
-    const sameProvince = stringValue(row.province_code).toUpperCase() === "ON";
-    const cityScore = samePlace(source.city, stringValue(row.city)) ? 1 : 0;
-    const modelScore = Math.max(
-      ...source.models.map((model) => similarity(model, stringValue(row.shelter_type))),
-      0,
-    );
-    const score = exactFacility
-      ? Math.min(1, 0.93 + cityScore * 0.04 + (sameProvince ? 0.03 : 0))
-      : Math.min(1, facilityScore * 0.8 + organizationScore * 0.1
-        + cityScore * 0.05 + (sameProvince ? 0.03 : 0) + modelScore * 0.02);
     candidates.push({
       id: stringValue(row.id),
       shelterId: stringValue(row.id),
-      score,
-      name: candidateName,
-      explanation: `Existing shelter · facility ${Math.round(facilityScore * 100)}% · organization ${Math.round(organizationScore * 100)}% · city ${Math.round(cityScore * 100)}%`,
+      name: stringValue(row.name),
+      city: stringValue(row.city),
+      province: stringValue(row.province_code),
+      shelterType: stringValue(row.shelter_type),
+      address: stringValue(row.address),
+      postalCode: stringValue(row.postal_code),
     });
   }
 
-  candidates.sort((left, right) => right.score - left.score);
-  const first = candidates[0];
-  const second = candidates[1];
-  if (!first || first.score < 0.7) {
-    return {
-      state: "unmatched",
-      score: first?.score ?? 0,
-      explanation: `${MATCHER_VERSION} · ${first
-        ? `No reliable facility match. Closest: ${first.name} (${Math.round(first.score * 100)}%).`
-        : "No Ontario directory candidate found."}`,
-    };
-  }
-  if (second && second.score >= 0.7 && first.score - second.score < 0.08) {
-    return {
-      state: "ambiguous",
-      score: first.score,
-      match: first,
-      explanation: `${MATCHER_VERSION} · Two close facility possibilities: ${first.name} and ${second.name}. Human choice required.`,
-    };
-  }
-  return {
-    state: first.score >= 0.96 ? "exact" : "probable",
-    score: first.score,
-    match: first,
-    explanation: `${MATCHER_VERSION} · ${first.name}: ${first.explanation}.`,
-  };
+  return bestResearchMatch(source, candidates);
 }
 
 function proposedChanges(source: TorontoResearchSeed) {
@@ -325,7 +236,7 @@ async function refreshPhase5B2Matches() {
         AND UPPER(COALESCE(json_extract(parsed_json, '$.provinceCode'), '')) = 'ON'
     `).all<Row>(),
     env.DB.prepare(`
-      SELECT id, name, city, province_code, shelter_type
+      SELECT id, name, city, province_code, shelter_type, address, postal_code
       FROM shelters
       WHERE province_code = 'ON' AND publication_state != 'archived'
     `).all<Row>(),
@@ -419,7 +330,7 @@ export async function ensureTorontoResearchPilot() {
         AND UPPER(COALESCE(json_extract(parsed_json, '$.provinceCode'), '')) = 'ON'
     `).all<Row>(),
     env.DB.prepare(`
-      SELECT id, name, city, province_code, shelter_type FROM shelters
+      SELECT id, name, city, province_code, shelter_type, address, postal_code FROM shelters
       WHERE province_code = 'ON' AND publication_state != 'archived'
     `).all<Row>(),
   ]);

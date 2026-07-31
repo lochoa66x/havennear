@@ -50,7 +50,7 @@ jobs:
         run: pnpm run build
 
       - name: Run directory privacy and safety tests
-        run: node --test tests/directory-safety.test.mjs
+        run: node --test tests/*.test.mjs
 
   secret-scan:
     name: Scan Git history for exposed secrets
