@@ -307,7 +307,7 @@ test("Phase 5B seeds official operator and government sources without publishing
   ]);
   const records = seed.match(/sourceRecordId: "\d+"/g) || [];
 
-  assert.equal(records.length, 22);
+  assert.equal(records.length, 23);
   assert.match(seed, /checked on 2026-07-30/);
   assert.match(seed, /City of Toronto|Covenant House Toronto|Dixon Hall/);
   assert.match(research, /verification_\$\{candidateId\}/);
@@ -347,7 +347,8 @@ test("Phase 5B hard-excludes sensitive or specialized candidates", async () => {
   for (const id of ["1053", "1054", "1741", "1001"]) {
     assert.match(migration, new RegExp(`'${id}'`));
   }
-  assert.equal((seed.match(/exclusionReason:/g) || []).length, 4);
+  assert.equal((seed.match(/exclusionReason:/g) || []).length, 5);
+  assert.match(seed, /sourceRecordId: "1021"[\s\S]*people living with HIV and AIDS/);
   assert.match(migration, /excluded_sensitive/);
   assert.match(research, /review_state != 'excluded_sensitive'/);
   assert.match(research, /This candidate is excluded by the sensitive-shelter policy/);
@@ -368,14 +369,20 @@ test("Phase 5B schema records private verification state and directory readiness
   assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
 });
 
-test("Phase 5B.2 matcher prioritizes facility identity and versions every suggestion", async () => {
+test("Phase 5B.3 matcher preserves acronyms, compares cities, and versions every suggestion", async () => {
   const research = await read("db/research.ts");
 
-  assert.match(research, /MATCHER_VERSION = "phase5b\.2-v2"/);
+  assert.match(research, /MATCHER_VERSION = "phase5b\.3-v3"/);
   assert.match(research, /facilityScore \* 0\.8 \+ organizationScore \* 0\.1/);
   assert.match(research, /exactFacility/);
+  assert.match(research, /split\(\/\\s\+\/\)\.filter\(Boolean\)/);
+  assert.match(research, /samePlace\(source\.city/);
   assert.match(research, /first\.score < 0\.7/);
   assert.match(research, /first\.score - second\.score < 0\.08/);
+  assert.doesNotMatch(
+    research,
+    /SELECT id, name, city, province_code, umbrella_organization, shelter_type FROM shelters/,
+  );
 });
 
 test("Phase 5B.2 refresh reopens only changed suggestions without erasing research evidence", async () => {
