@@ -128,6 +128,14 @@ export const torontoVerificationSeeds: TorontoVerificationSeed[] = [
     },
   },
   {
+    sourceRecordId: "1021",
+    publisher: "Good Shepherd Ministries",
+    title: "Supportive Housing – Barrett House",
+    url: "https://goodshepherd.ca/supportive-housing/",
+    fieldsSupported: ["targetPopulation", "programType", "services"],
+    exclusionReason: "Health-specific supportive housing is outside HavenNear's general public shelter scope and is excluded conservatively because the residence serves people living with HIV and AIDS.",
+  },
+  {
     sourceRecordId: "1195",
     publisher: "Homes First",
     title: "4117 Lawrence Shelter",

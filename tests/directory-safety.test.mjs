@@ -307,7 +307,7 @@ test("Phase 5B seeds official operator and government sources without publishing
   ]);
   const records = seed.match(/sourceRecordId: "\d+"/g) || [];
 
-  assert.equal(records.length, 22);
+  assert.equal(records.length, 23);
   assert.match(seed, /checked on 2026-07-30/);
   assert.match(seed, /City of Toronto|Covenant House Toronto|Dixon Hall/);
   assert.match(research, /verification_\$\{candidateId\}/);
@@ -347,7 +347,8 @@ test("Phase 5B hard-excludes sensitive or specialized candidates", async () => {
   for (const id of ["1053", "1054", "1741", "1001"]) {
     assert.match(migration, new RegExp(`'${id}'`));
   }
-  assert.equal((seed.match(/exclusionReason:/g) || []).length, 4);
+  assert.equal((seed.match(/exclusionReason:/g) || []).length, 5);
+  assert.match(seed, /sourceRecordId: "1021"[\s\S]*people living with HIV and AIDS/);
   assert.match(migration, /excluded_sensitive/);
   assert.match(research, /review_state != 'excluded_sensitive'/);
   assert.match(research, /This candidate is excluded by the sensitive-shelter policy/);
