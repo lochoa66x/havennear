@@ -369,20 +369,21 @@ test("Phase 5B schema records private verification state and directory readiness
   assert.doesNotMatch(migration, /INSERT.+INTO shelters/is);
 });
 
-test("Phase 5B.3 matcher preserves acronyms, compares cities, and versions every suggestion", async () => {
-  const research = await read("db/research.ts");
+test("Phase 5C.2 matcher uses program, address, and service-model safety evidence", async () => {
+  const [research, matcher] = await Promise.all([
+    read("db/research.ts"),
+    read("db/research-matcher.js"),
+  ]);
 
-  assert.match(research, /MATCHER_VERSION = "phase5b\.3-v3"/);
-  assert.match(research, /facilityScore \* 0\.8 \+ organizationScore \* 0\.1/);
-  assert.match(research, /exactFacility/);
-  assert.match(research, /split\(\/\\s\+\/\)\.filter\(Boolean\)/);
-  assert.match(research, /samePlace\(source\.city/);
-  assert.match(research, /first\.score < 0\.7/);
-  assert.match(research, /first\.score - second\.score < 0\.08/);
-  assert.doesNotMatch(
-    research,
-    /SELECT id, name, city, province_code, umbrella_organization, shelter_type FROM shelters/,
-  );
+  assert.match(matcher, /MATCHER_VERSION = "phase5c\.2-v4"/);
+  assert.match(matcher, /exactProgram/);
+  assert.match(matcher, /address\.conflict \|\| model\.conflict/);
+  assert.match(matcher, /first\.score < 0\.7/);
+  assert.match(matcher, /first\.score - second\.score < 0\.08/);
+  assert.match(research, /assessShelterScope\(parsed\)\.eligible/);
+  assert.match(research, /shelter_type, address, postal_code/);
+  assert.match(research, /bestResearchMatch\(source, candidates\)/);
+  assert.doesNotMatch(research, /umbrella_organization/);
 });
 
 test("Phase 5B.2 refresh reopens only changed suggestions without erasing research evidence", async () => {
