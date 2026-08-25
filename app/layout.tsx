@@ -13,6 +13,16 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "HavenNear — Find a safe place tonight",
     description:
       "Free, private shelter information with recently confirmed availability. No visitor account needed.",
+    robots: {
+      index: false,
+      follow: false,
+      nocache: true,
+      googleBot: {
+        index: false,
+        follow: false,
+        noimageindex: true,
+      },
+    },
     icons: {
       icon: "/favicon.svg",
       shortcut: "/favicon.svg",
