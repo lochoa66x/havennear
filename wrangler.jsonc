@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "havennear-demo",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "havennear-demo",
+      "database_id": "5e0bfd51-daef-47c1-ab1a-db143f61ca06",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}
